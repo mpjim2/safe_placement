@@ -6,7 +6,7 @@
     <arg name="transmission" default="effort" />
 
     <include file="$(find safe_placement)/launch/panda.launch" pass_all_args="true">
-        <arg name="modelfile" value="$(find safe_placement)/assets/picknplace_world.xml" />
+        <arg name="modelfile" value="$(find safe_placement)/assets/panda_world.xml" />
         <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
         <arg name="use_gripper" default="$(arg load_gripper)" />
         <arg name="controller" default="$(arg transmission)_joint_trajectory_controller" />

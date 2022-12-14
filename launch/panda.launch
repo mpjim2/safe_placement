@@ -8,7 +8,7 @@
   <arg name="arm_id"      default="panda" doc="Name of the panda robot to spawn" />
   <arg name="use_gripper" default="true"  doc="Should a franka hand be mounted on the flange?" />
   <arg name="controller"  default=" "     doc="Which example controller should be started? (One of {cartesian_impedance,model,force,joint_position,joint_velocity}_example_controller)" />
-  <arg name="modelfile"   default="$(find safe_placement)/assets/empty_panda_world.xml" doc="MuJoCo xml file to load. Should define robot model and world." />
+  <arg name="modelfile"   default="$(find safe_placement)/assets/panda_world.xml" doc="MuJoCo xml file to load. Should define robot model and world." />
   <arg name="headless"    default="false" />
   <arg name="num_sim_steps" default="-1" />
   <arg name="xacro_args" default="" doc="Additional arguments to pass to panda.urdf.xacro" />
