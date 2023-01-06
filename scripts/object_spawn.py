@@ -25,13 +25,13 @@ import rospkg
 
 def sample_obj_params(object_params=dict()):
 
-    obj_types = object_params.get("types", ["box", "cylinder"])
+    obj_types = object_params.get("types", ["box"])
     range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
     range_obj_height = object_params.get("range_height", np.array([0.05/2, 0.1/2])) # [m]
     range_obj_wl = object_params.get("range_wl", np.array([0.05/2, 0.1/2])) # [m]; range width and length (requires object type "box")
-    range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.3])) # [kg]
-    range_obj_sliding_fric = object_params.get("range_sliding_fric", np.array([0.3, 0.7])) # ignore torsional friction, because object cannot be a sphere
-
+    range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
+    range_obj_sliding_fric = object_params.get("range_sliding_fric", np.array([0.69, 0.7])) # ignore torsional friction, because object cannot be a sphere
+    
     # sample new object/target type
     idx_type = np.random.randint(low=0, high=len(obj_types))
     obj_type = obj_types[idx_type]
@@ -64,15 +64,15 @@ def sample_obj_params(object_params=dict()):
 def sample_object_pose(obj_height, object_params=dict()):
     range_obj_x_pos = object_params.get("range_x_pos", np.array([0.275,0.525])) #[m]
     range_obj_y_pos = object_params.get("range_y_pos", np.array([-0.2,0.2])) #[m]
-    # sample rotation about z-axis
-    z_angle = np.random.uniform(low=-np.pi, high=np.pi)
+    # sample rotation about Y-axis
+    y_angle = np.random.uniform(low=-np.pi, high=np.pi)
     # sample x-pos
     x_pos = np.random.uniform(low=range_obj_x_pos[0], high=range_obj_x_pos[1])
     # sample y-pos 
     y_pos = np.random.uniform(low=range_obj_y_pos[0], high=range_obj_y_pos[1])
 
     pos = np.array([x_pos, y_pos, obj_height + 5])
-    quat = tf.transformations.quaternion_from_euler(0,0,z_angle)
+    quat = tf.transformations.quaternion_from_euler(0,y_angle,0)
 
     return pos, quat
 
@@ -117,10 +117,16 @@ class ObjectPoseSpawn:
 
         self.set_geom_properties = rospy.ServiceProxy("/mujoco_server/set_geom_properties", SetGeomProperties)
         self.set_body_state = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
+        
+        #client for MoveAction
+        self.release_client = actionlib.SimpleActionClient("/franka_gripper/move", MoveAction)
+        rospy.loginfo("Waiting for MoveAction action server...")
+        self.release_client.wait_for_server()
 
-        self.actionClient = actionlib.SimpleActionClient("/franka_gripper/grasp", GraspAction)
-        rospy.loginfo("Waiting for action server...")
-        self.actionClient.wait_for_server()
+        #client for grasp action (only needed when resetting the environment)
+        self.grasp_client = actionlib.SimpleActionClient("/franka_gripper/grasp", GraspAction)
+        rospy.loginfo("Waiting for GraspAction action server...")
+        self.grasp_client.wait_for_server()
         rospy.loginfo("Action server started!")
 
 
@@ -128,12 +134,12 @@ class ObjectPoseSpawn:
         obj_geom_type_value,  obj_size_0, obj_size_1, obj_size_2, obj_sliding_fric, obj_mass = sample_obj_params()
 
         obj_geom_type = GeomType(value=obj_geom_type_value)
-        obj_geom_properties = GeomProperties(env_id=0, name="object_geom", type=obj_geom_type, size_0=obj_size_0, size_1=obj_size_1, size_2=obj_size_2, friction_slide=obj_sliding_fric)
+        obj_geom_properties = GeomProperties(env_id=0, name="object_geom", type=obj_geom_type, size_0=obj_size_0, size_1=obj_size_1, size_2=obj_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
         resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
         if not resp.success:
             rospy.logerr("SetGeomProperties:failed to set object parameters")
         
-        ee_pos, _ = self.compute_EE_pose()
+        ee_pos, ee_quat = self.compute_EE_pose()
 
         _, obj_quat = sample_object_pose(obj_size_1)
 
@@ -141,6 +147,8 @@ class ObjectPoseSpawn:
         resp = self.set_body_state(state=body_state, set_pose=True, set_twist=False, set_mass=True, reset_qpos=False)
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
+
+        return obj_size_1
 
     def _new_msg_callback(self, msg):
 
@@ -173,33 +181,35 @@ class ObjectPoseSpawn:
         
         return position, orientation_q
 
-    def open_gripper(self, width):
+    def open_gripper(self):
+        goal = MoveGoal(width=0.08, speed=0.05)
 
-        pass
+        self.release_client.send_goal(goal)
+        self.release_client.wait_for_result(rospy.Duration(3))
 
-    def close_gripper(self, width=0.005, epsilon=0.0002, speed=0.1, force=1):
+        success = self.release_client.get_result()
+        if not success:
+            rospy.logerr("Open Action failed!")
+    
+
+    def close_gripper(self, width=0.05, eps=0.0001, speed=0.1, force=10):
         
-        epsilon = GraspEpsilon(inner=epsilon-0.000001, outer=epsilon+0.000001)
+        epsilon = GraspEpsilon(inner=eps, outer=eps)
         goal_ = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)
         
-        #id_ = GoalID(stamp=rospy.Time.now(), id='grasp')
-                
-        #goal = GraspActionGoal(goal=goal_)
+        self.grasp_client.send_goal(goal_)
+        self.grasp_client.wait_for_result(rospy.Duration(3))
 
-        self.actionClient.send_goal(goal_)
-        self.actionClient.wait_for_result()
+        success = self.grasp_client.get_result()
 
-        success = self.actionClient.get_result()
-        print(success)
         if not success:
-            rospy.logerror("Grasp Action failed!")
+            rospy.logerr("Grasp Action failed!")
         
 
 if __name__=='__main__':
 
     test = ObjectPoseSpawn()
 
-    test.set_object_params()    
-
-    test.compute_EE_pose()
-    test.close_gripper()
+    test.open_gripper()
+    w = test.set_object_params()
+    test.close_gripper(width=w*2)

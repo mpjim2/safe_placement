@@ -16,7 +16,7 @@
         <arg name="modelfile" value="$(find safe_placement)/assets/panda_world.xml" />
         <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
         <arg name="use_gripper" default="$(arg load_gripper)" />
-        <arg name="controller" default="cartesian_twist_controller"/>
+        <arg name="controller" default="effort_joint_trajectory_controller"/>
         <arg name="unpause" default="true" />
         <arg name="rviz"     value="false" />
     </include>
