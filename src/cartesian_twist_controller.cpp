@@ -11,6 +11,7 @@
 
 #include <control_toolbox/pid.h>
 
+
 #include <geometry_msgs/Twist.h>
 #include <franka_hw/franka_model_interface.h>
 #include <controller_interface/controller_base.h>
@@ -144,8 +145,6 @@ void CartesianTwistController::update(const ros::Time& /* time */,
 
 
   twistCommand = Eigen::Map<Eigen::Matrix<double,6, 1> >(curr_cmd.twist);
-
-
  
   std::array<double, 42> jacobianArray = model_handle_ -> getZeroJacobian(franka::Frame::kEndEffector);
   Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobianArray.data());
