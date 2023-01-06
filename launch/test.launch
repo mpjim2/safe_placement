@@ -4,22 +4,37 @@
 
     <arg name="load_gripper" default="true" />
     <arg name="transmission" default="effort" />
+    <arg name="robot" default="panda" doc="choose your robot. Possible values: [panda, fr3]"/>
+    <arg name="arm_id" default="$(arg robot)" />
+    <arg name="rx" default="0" />
+    <arg name="ry" default="0" />
+    <arg name="tz" default="1" />
+
+
 
     <include file="$(find safe_placement)/launch/panda.launch" pass_all_args="true">
         <arg name="modelfile" value="$(find safe_placement)/assets/panda_world.xml" />
         <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
         <arg name="use_gripper" default="$(arg load_gripper)" />
-        <arg name="controller" default="$(arg transmission)_joint_trajectory_controller" />
+        <arg name="controller" default="cartesian_twist_controller"/>
         <arg name="unpause" default="true" />
         <arg name="rviz"     value="false" />
     </include>
 
+
+    
+
+    <!-- <include file="$(find safe_placement)/launch/cartesian_velocity_example.launch" pass_all_args="true"></include> -->
+    <!-- <include file="$(find safe_placement)/launch/move_to_start.launch" pass_all_args="true" ></include> -->
+    
+    <!-- <rosparam command="load" file="$(find franka_example_controllers)/config/franka_example_controllers.yaml" subst_value="true" />
+    <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"  args="joint_velocity_example_controller"/>
+     -->
+    
     <!-- <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true"> -->
-    <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true">
-         <!-- Description is already loaded by the mujoco launchfile  -->
+    <!-- <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true">
         <arg name="load_robot_description" value="false" />
-         <!-- Simple controller manager provides ros_control's JointTrajectory controllers as well as GripperCommand actions  -->
         <arg name="moveit_controller_manager" value="simple" />
         <arg name="use_rviz" value="false" />
-    </include>
+    </include> -->
 </launch>

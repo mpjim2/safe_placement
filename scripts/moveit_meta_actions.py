@@ -177,20 +177,13 @@ if __name__=='__main__':
 
     test = MoveItMetaPlanner()
     
+    print('rotate around X')
+    test.rotate_EE(theta=0.3*pi, axis=[1,0,0])
+    
 
     print('rotate around Y')
     test.rotate_EE(theta=0.3*pi, axis=[0,1,0])
-    print('rotate around X')
-    test.rotate_EE(theta=0.3*pi, axis=[1,0,0])
-
-
-  
-
-
-
-    print('rotate around Z')
-    test.rotate_EE(theta=1.5*pi, axis=[0,0,1])
-    
+        
     print("move down")
     test.move_down(-0.1)
 

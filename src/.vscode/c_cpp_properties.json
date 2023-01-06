@@ -1,0 +1,52 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/marco/Uni/Masterarbeit/thesis_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_planners/chomp/chomp_motion_planner/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/franka_ros_interface/franka_interface/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/franka_ros_mujoco/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/franka_ros_interface/franka_ros_controllers/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/geometric_shapes/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_planners/chomp/chomp_interface/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit_resources/prbt_ikfast_manipulator_plugin/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_ros/benchmarks/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_plugins/moveit_ros_control_interface/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_ros/move_group/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_ros/occupancy_map_monitor/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_ros/robot_interaction/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_ros/moveit_servo/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_setup_assistant/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_plugins/moveit_simple_controller_manager/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit_visual_tools/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/mujoco_contact_surfaces/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/mujoco_ros_pkgs/mujoco_ros/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/mujoco_ros_pkgs/mujoco_ros_control/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/mujoco_ros_pkgs/mujoco_ros_sensors/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_planners/pilz_industrial_motion_planner/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/moveit/moveit_planners/pilz_industrial_motion_planner_testutils/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/tactile_toolbox/rviz_tactile_plugins/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/rviz_visual_tools/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/safe_placement/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/srdfdom/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/tactile_toolbox/tactile_merger/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/urdf/urdf/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/urdf/urdf_parser_plugin/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/tactile_toolbox/urdf_tactile/include/**",
+        "/home/marco/Uni/Masterarbeit/thesis_ws/src/urdfdom_headers/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

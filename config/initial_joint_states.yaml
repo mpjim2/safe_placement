@@ -7,5 +7,5 @@ initial_joint_positions:
     $(arg arm_id)_joint5 : "0"
     $(arg arm_id)_joint6:  "3.14159265"
     $(arg arm_id)_joint7 : "0.785398163397"
-    $(arg arm_id)_finger_joint1 : "1"
-    $(arg arm_id)_finger_joint2 : "1"
+    $(arg arm_id)_finger_joint1 : "0.001"
+    $(arg arm_id)_finger_joint2 : "0.001"

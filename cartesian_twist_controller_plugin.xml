@@ -1,0 +1,7 @@
+<library path="lib/libsafe_placement">
+  <class name="safe_placement/CartesianTwistController" type="safe_placement::CartesianTwistController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller that executes the given cartesian Twist at the Endeffector
+    </description>
+  </class>
+</library>

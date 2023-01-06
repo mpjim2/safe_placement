@@ -1,2 +1,6 @@
 /assets/meshes/
 /assets/panda.xml
+/assets/urdf/
+/.vscode/
+/assets/panda_myrmex_gripper.xml
+**/.vscode
