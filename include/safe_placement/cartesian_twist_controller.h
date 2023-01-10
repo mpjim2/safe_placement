@@ -34,11 +34,12 @@ class CartesianTwistController : public controller_interface::MultiInterfaceCont
 
  private:
   hardware_interface::VelocityJointInterface* velocity_joint_interface_;
-  franka_hw::FrankaModelInterface* model_interface;
+  franka_hw::FrankaModelInterface* model_interface_;
 
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::vector<hardware_interface::JointHandle> velocity_joint_handles_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
+
   ros::Duration elapsed_time_;
   Eigen::VectorXd twistCommand;
   struct Commands
@@ -49,16 +50,9 @@ class CartesianTwistController : public controller_interface::MultiInterfaceCont
       Commands() : twist{}, stamp(0.0) {}
     };
   
-  realtime_tools::RealtimeBuffer<Commands> command_; // command_ is name of realtime buffer
+  realtime_tools::RealtimeBuffer<Commands> command_; 
   Commands command_struct_;
-  ros::Subscriber sub_command_; //subscriber to listen to commands
-
-  Eigen::Vector3d position_d_;
-  Eigen::Quaterniond orientation_d_;
-  std::mutex position_and_orientation_d_target_mutex_;
-  Eigen::Vector3d position_d_target_;
-  Eigen::Quaterniond orientation_d_target_;
-  // std::shared_ptr<realtime_tools::RealtimePublisher<tf::tfMessage> > tf_odom_pub_;
+  ros::Subscriber sub_command_; 
 
   std::vector<control_toolbox::Pid> pid_controllers_;
 

@@ -28,10 +28,8 @@ bool CartesianTwistController::init(hardware_interface::RobotHW* robot_hardware,
 
   velocity_joint_interface_ = robot_hardware->get<hardware_interface::VelocityJointInterface>();
   
-  model_interface = robot_hardware->get<franka_hw::FrankaModelInterface>();
+  model_interface_ = robot_hardware->get<franka_hw::FrankaModelInterface>();
   
-  // if (!pid_controller_.init(ros::NodeHandle(node_handle, "gains")))
-  //   return false;
 
   std::string arm_id;
 
@@ -40,7 +38,7 @@ bool CartesianTwistController::init(hardware_interface::RobotHW* robot_hardware,
     return false;
   }
 
-  model_handle_ = std::make_unique<franka_hw::FrankaModelHandle>(model_interface->getHandle(arm_id + "_model"));
+  model_handle_ = std::make_unique<franka_hw::FrankaModelHandle>(model_interface_->getHandle(arm_id + "_model"));
 
   if (model_handle_ == nullptr) {
     ROS_ERROR(
@@ -49,7 +47,7 @@ bool CartesianTwistController::init(hardware_interface::RobotHW* robot_hardware,
   }
 
   
-  if (model_interface == nullptr) {
+  if (model_interface_ == nullptr) {
     ROS_ERROR(
         "CartesianTwistController: Error getting Franka model interface from hardware!");
     return false;
@@ -80,23 +78,11 @@ bool CartesianTwistController::init(hardware_interface::RobotHW* robot_hardware,
     }
   }
 
-  // effort_joint_handles_.resize(7);
-  // for (size_t i = 0; i < 7; ++i) {
-  //   try {
-  //     effort_joint_handles_[i] = effort_joint_interface_->getHandle(joint_names[i]);
-  //   } catch (const hardware_interface::HardwareInterfaceException& ex) {
-  //     ROS_ERROR_STREAM(
-  //         "CartesianTwistController: Exception getting joint handles: " << ex.what());
-  //     return false;
-  //   }
-  // }
 
-  // Load PID Controller using gains set on parameter server
   // pid_controllers_.resize(7);
   // for (size_t i=0; i<7; ++i) {
   //   pid_controllers_[i].init(ros::NodeHandle(node_handle, "/cartesian_twist_controller/gains/" + joint_names[i]));
   // }
-
 
 
   auto state_interface = robot_hardware->get<franka_hw::FrankaStateInterface>();
@@ -132,20 +118,16 @@ bool CartesianTwistController::init(hardware_interface::RobotHW* robot_hardware,
 
 void CartesianTwistController::starting(const ros::Time& /* time */) {  
   
-  // for (auto pid : pid_controllers_) {
-  //   pid.reset();
-  // }
 }
 
 void CartesianTwistController::update(const ros::Time& /* time */,
-                                            const ros::Duration& period) {
+                                      const ros::Duration& period) {
   
   // 2. Listen to Realtime Buffer to get current control Twist signal
   Commands curr_cmd = *(command_.readFromRT());
 
-
   twistCommand = Eigen::Map<Eigen::Matrix<double,6, 1> >(curr_cmd.twist);
- 
+  
   std::array<double, 42> jacobianArray = model_handle_ -> getZeroJacobian(franka::Frame::kEndEffector);
   Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobianArray.data());
   
@@ -153,7 +135,7 @@ void CartesianTwistController::update(const ros::Time& /* time */,
 
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(jacobian, Eigen::ComputeFullV | Eigen::ComputeFullU );
   
-  // Invert singular values: Currently simple Iversion 1/s; to account for singularities implement methods from lecture!
+  // Invert singular values
 
   Eigen::VectorXd singularValues = svd.singularValues();
   Eigen::VectorXd invertedSingularValues(singularValues.size());
@@ -177,7 +159,7 @@ void CartesianTwistController::update(const ros::Time& /* time */,
     
     // double vel_error = jointVels[i] - velocity_joint_handles_[i].getVelocity();
 
-    // double commanded_velocity = pid_controllers_[i].computeCommand(vel_error, period);
+    // double vel_command = pid_controllers_[i].computeCommand(vel_error, period);
 
     velocity_joint_handles_[i].setCommand(jointVels[i]);
   }

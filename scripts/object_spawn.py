@@ -166,10 +166,13 @@ class ObjectPoseSpawn:
                 self.last_timestamps[key[0]] = self.current_msg[key[0]].header.stamp # remember timestamp of old message
             self.current_msg[key[0]] = msg
 
+    def compute_goal_pose(self):
+        pass
+        
     def compute_EE_pose(self):
-
+        
+        print(self.current_msg['franka_state'])
         transformationEE = self.current_msg['franka_state'].O_T_EE
-
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
         
         orientation = transformationEE[:3, :3]
