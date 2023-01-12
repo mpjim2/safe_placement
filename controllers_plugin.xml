@@ -4,4 +4,9 @@
       A controller that executes the given cartesian Twist at the Endeffector
     </description>
   </class>
+  <class name="safe_placement/CartesianVelocityImpedanceController" type="safe_placement::CartesianVelocityImpedanceController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller that executes the given cartesian Twist at the Endeffector
+    </description>
+  </class>
 </library>

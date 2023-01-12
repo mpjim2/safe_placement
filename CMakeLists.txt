@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   pluginlib
   realtime_tools
+  dynamic_reconfigure
 )
 
 find_package(Franka 0.9.0 QUIET)
@@ -37,6 +38,7 @@ catkin_package(
                  realtime_tools 
                  roscpp 
                  rospy
+                 dynamic_reconfigure
   DEPENDS Franka
           EIGEN3
 )
@@ -44,7 +46,8 @@ catkin_package(
 include_directories(include ${catkin_INCLUDE_DIRS}
                             ${EIGEN3_INDLUDE_DIRS})
 
-add_library(${PROJECT_NAME} src/cartesian_twist_controller.cpp)
+add_library(${PROJECT_NAME} src/cartesian_twist_controller.cpp
+                            src/cartesian_velocity_impedance_controller.cpp)
 
 target_link_libraries(${PROJECT_NAME} 
                       ${catkin_LIBRARIES}

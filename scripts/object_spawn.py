@@ -5,6 +5,11 @@ import numpy as np
 from copy import deepcopy
 import gym 
 from gym.spaces import Box, Dict
+import pyquaternion as pq
+
+
+from math import sin, cos, pi
+
 
 from scipy.spatial.transform import Rotation as R
 
@@ -12,7 +17,7 @@ from scipy.spatial.transform import Rotation as R
 from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal
 
 import rospy, rosgraph, roslaunch, rosservice
-from geometry_msgs.msg import PoseStamped, PointStamped, QuaternionStamped
+from geometry_msgs.msg import PoseStamped, PointStamped, QuaternionStamped, Twist
 from franka_msgs.msg import FrankaState
 from franka_msgs.srv import SetEEFrame
 from tactile_msgs.msg import TactileState
@@ -21,7 +26,7 @@ from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState
 import tf.transformations
 import message_filters, actionlib
 import rospkg 
-
+import time
 
 def sample_obj_params(object_params=dict()):
 
@@ -94,6 +99,38 @@ def arr_to_pose_msg(pos, quat):
 
     return pose
 
+def normalize(v):
+    norm = np.linalg.norm(v)
+    if norm == 0: 
+       return v
+    return v / norm
+
+
+def axis_angle_to_quaternion(axis, angle):
+
+    qx = axis[0] * sin(angle/2)
+    qy = axis[1] * sin(angle/2)
+    qz = axis[2] * sin(angle/2)
+    qw = cos(angle/2)
+
+    return normalize(np.array([qx, qy, qz, qw]))
+
+
+def quaternion_multiplication(q1, q2):
+
+    q_x = q1[3] * q2[0] + q1[0] * q2[3] + q1[1] * q2[2] - q1[2] * q2[1]
+    q_y = q1[3] * q2[1] - q1[0] * q2[2] + q1[1] * q2[3] + q1[2] * q2[0]
+    q_z = q1[3] * q2[2] + q1[0] * q2[1] - q1[1] * q2[0] + q1[2] * q2[3]
+    q_w = q1[3] * q2[3] - q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2]
+
+    q = np.array([q_x, q_y, q_z, q_w])
+   
+    return q
+
+def quat_dot(q1, q2):
+
+    return q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3]
+
 class ObjectPoseSpawn:
 
     def __init__(self):
@@ -118,6 +155,8 @@ class ObjectPoseSpawn:
         self.set_geom_properties = rospy.ServiceProxy("/mujoco_server/set_geom_properties", SetGeomProperties)
         self.set_body_state = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
         
+        self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
+    
         #client for MoveAction
         self.release_client = actionlib.SimpleActionClient("/franka_gripper/move", MoveAction)
         rospy.loginfo("Waiting for MoveAction action server...")
@@ -128,6 +167,7 @@ class ObjectPoseSpawn:
         rospy.loginfo("Waiting for GraspAction action server...")
         self.grasp_client.wait_for_server()
         rospy.loginfo("Action server started!")
+
 
 
     def set_object_params(self):
@@ -171,7 +211,6 @@ class ObjectPoseSpawn:
         
     def compute_EE_pose(self):
         
-        print(self.current_msg['franka_state'])
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
         
@@ -193,7 +232,8 @@ class ObjectPoseSpawn:
         success = self.release_client.get_result()
         if not success:
             rospy.logerr("Open Action failed!")
-    
+
+        return success
 
     def close_gripper(self, width=0.05, eps=0.0001, speed=0.1, force=10):
         
@@ -207,12 +247,84 @@ class ObjectPoseSpawn:
 
         if not success:
             rospy.logerr("Grasp Action failed!")
+
+        return success
+
+    def moveArm(self, rotate_X=0, rotate_Y=0, translateZ=0):
+
+        pos_init, quat_init = self.compute_EE_pose()
+
+        quat_init = pq.Quaternion(quat_init)
+
+        quat = deepcopy(quat_init)
+        if rotate_X > 0:
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.04)
+        elif rotate_X < 0:
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.04)
+        if rotate_Y > 0:
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.04)
+        elif rotate_Y < 0:
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.04)
         
+        if quat_dot(quat_init, quat) < 0:
+            quat *= -1
+        
+        twist_quat = quat_init.inverse * quat
+        
+        xyz = twist_quat.vector 
+
+        pos = np.zeros(3)
+        if translateZ > 0:
+            pos[2] -= 0.005
+        elif translateZ < 0:
+            pos[2] += 0.005
+
+        twist_msg = Twist()
+
+        twist_msg.linear.x = pos[0]
+        twist_msg.linear.y = pos[1]
+        twist_msg.linear.z = pos[2]
+
+        twist_msg.angular.x = xyz[0]
+        twist_msg.angular.y = xyz[1]
+        twist_msg.angular.z = xyz[2]
+
+        self.twist_pub.publish(twist_msg)
+
 
 if __name__=='__main__':
 
     test = ObjectPoseSpawn()
 
-    test.open_gripper()
-    w = test.set_object_params()
-    test.close_gripper(width=w*2)
+    s = False
+
+    while not s:
+        s = test.open_gripper()
+        w = test.set_object_params()
+        s = test.close_gripper(width=w*2)
+
+    # test.moveArm(translateZ=True)
+    # time.sleep(5)
+
+    # total_X = 0
+    # total_Y = 0
+    # total_Z = 0
+    for i in range(100):
+
+        r_x = np.random.choice([-1, 0, 1])
+        r_y = np.random.choice([-1, 0, 1])
+        t_z = np.random.choice([-1, 0])
+
+        print("r_x: ", r_x, " r_y: ", r_y, " t_z: ", t_z)
+        test.moveArm(rotate_X=r_x, rotate_Y=r_y, translateZ=t_z)
+        time.sleep(0.2)
+
+    # print("Total Rotation around X: ", total_X)
+    # print("Total Rotation around Y: ", total_Y)
+    # print("Total Translation along Z: ", total_Z)
+
+
+    # test.moveArm(rotate_X=0, rotate_Y=0, translateZ=1)
+    # time.sleep(5)
+    # test.moveArm(rotate_Y=True)
+

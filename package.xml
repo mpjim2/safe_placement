@@ -21,6 +21,7 @@
   <depend>pluginlib</depend>
   <depend>realtime_tools</depend>
   <depend>control_msgs</depend>
+  <depend>dynamic_reconfigure</depend>
   <depend>geometry_msgs</depend>
   <depend>control_toolbox</depend>
   <depend>controller_manager</depend>
@@ -40,6 +41,6 @@
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
-    <controller_interface plugin="${prefix}/cartesian_twist_controller_plugin.xml"/>
+    <controller_interface plugin="${prefix}/controllers_plugin.xml"/>
 </export>
 </package>
