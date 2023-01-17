@@ -1,0 +1,6 @@
+setup.py
+gym_safe_placement.egg-info/PKG-INFO
+gym_safe_placement.egg-info/SOURCES.txt
+gym_safe_placement.egg-info/dependency_links.txt
+gym_safe_placement.egg-info/requires.txt
+gym_safe_placement.egg-info/top_level.txt
