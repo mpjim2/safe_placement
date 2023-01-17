@@ -15,8 +15,10 @@ from scipy.spatial.transform import Rotation as R
 
 
 from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal
+from franka_msgs.srv import SetLoad
 
 import rospy, rosgraph, roslaunch, rosservice
+from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseStamped, PointStamped, QuaternionStamped, Twist
 from franka_msgs.msg import FrankaState
 from franka_msgs.srv import SetEEFrame
@@ -32,8 +34,8 @@ def sample_obj_params(object_params=dict()):
 
     obj_types = object_params.get("types", ["box"])
     range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
-    range_obj_height = object_params.get("range_height", np.array([0.05/2, 0.1/2])) # [m]
-    range_obj_wl = object_params.get("range_wl", np.array([0.05/2, 0.1/2])) # [m]; range width and length (requires object type "box")
+    range_obj_height = object_params.get("range_height", np.array([0.15/2, 0.2/2])) # [m]
+    range_obj_wl = object_params.get("range_wl", np.array([0.07/2, 0.12/2])) # [m]; range width and length (requires object type "box")
     range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
     range_obj_sliding_fric = object_params.get("range_sliding_fric", np.array([0.69, 0.7])) # ignore torsional friction, because object cannot be a sphere
     
@@ -145,18 +147,28 @@ class ObjectPoseSpawn:
         self.last_timestamps = {"franka_state" : 0}
         
         all_services_available = False
-        required_srv = ["/franka_control/set_EE_frame", "/mujoco_server/set_geom_properties", "/mujoco_server/set_body_state"]
+        required_srv = ["/franka_control/set_EE_frame", 
+                        "/franka_control/set_load",
+                        "/mujoco_server/set_geom_properties", 
+                        "/mujoco_server/set_body_state", 
+                        "/mujoco_server/reset",
+                        "/mujoco_server/pause"]
+
         while not all_services_available:
             service_list = rosservice.get_service_list()
             if not [srv for srv in required_srv if srv not in service_list]:
                 all_services_available = True
                 print("All Services Available!")
 
+       
         self.set_geom_properties = rospy.ServiceProxy("/mujoco_server/set_geom_properties", SetGeomProperties)
-        self.set_body_state = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
-        
-        self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
+        self.set_body_state      = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
+        self.reset_world         = rospy.ServiceProxy("/mujoco_server/reset", Empty)
+        self.set_load            = rospy.ServiceProxy("/franka_control/set_load", SetLoad)
     
+
+        self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
+
         #client for MoveAction
         self.release_client = actionlib.SimpleActionClient("/franka_gripper/move", MoveAction)
         rospy.loginfo("Waiting for MoveAction action server...")
@@ -183,6 +195,7 @@ class ObjectPoseSpawn:
 
         _, obj_quat = sample_object_pose(obj_size_1)
 
+        ee_pos[-1] -= obj_size_2/2
         body_state = BodyState(env_id=0, name="object", pose=arr_to_pose_msg(ee_pos, obj_quat), mass=obj_mass)
         resp = self.set_body_state(state=body_state, set_pose=True, set_twist=False, set_mass=True, reset_qpos=False)
         if not resp.success:
@@ -235,7 +248,7 @@ class ObjectPoseSpawn:
 
         return success
 
-    def close_gripper(self, width=0.05, eps=0.0001, speed=0.1, force=10):
+    def close_gripper(self, width=0.05, eps=0.0001, speed=0.1, force=20):
         
         epsilon = GraspEpsilon(inner=eps, outer=eps)
         goal_ = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)
@@ -250,13 +263,31 @@ class ObjectPoseSpawn:
 
         return success
 
+    def getMass(self):
+
+        mass = self.current_msg['franka_state'].m_load
+
+
+        return mass
+
+    def setLoad(self): 
+        
+        mass = 0.078*2 #mass of two ubi fingertips
+        F_x_center_load = [0,0,0.17]
+        load_inertia = [0, 0, 0.000651, 0, 0, 0.000651, 0, 0, 0.000896]
+
+        #{0,0,0.17} translation from flange to in between fingers; default for f_x_center
+        response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
+        
+        return response.success  
+
     def moveArm(self, rotate_X=0, rotate_Y=0, translateZ=0):
 
-        pos_init, quat_init = self.compute_EE_pose()
+        pos_init, _ = self.compute_EE_pose()
 
-        quat_init = pq.Quaternion(quat_init)
+        quat = pq.Quaternion()
 
-        quat = deepcopy(quat_init)
+        # quat = deepcopy(quat_init)
         if rotate_X > 0:
             quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.04)
         elif rotate_X < 0:
@@ -266,12 +297,12 @@ class ObjectPoseSpawn:
         elif rotate_Y < 0:
             quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.04)
         
-        if quat_dot(quat_init, quat) < 0:
-            quat *= -1
+        # if quat_dot(quat_init, quat) < 0:
+        # quat *= -1
         
-        twist_quat = quat_init.inverse * quat
+        # twist_quat = quat_init.inverse * quat
         
-        xyz = twist_quat.vector 
+        xyz = quat.vector 
 
         pos = np.zeros(3)
         if translateZ > 0:
@@ -302,6 +333,15 @@ if __name__=='__main__':
         s = test.open_gripper()
         w = test.set_object_params()
         s = test.close_gripper(width=w*2)
+        
+
+    # measured_mass = test.getMass()
+
+    # time.sleep(1)
+    # print("Measured Mass at Endeffector: ", measured_mass)
+
+    # w = test.set_object_params()
+    # test.setLoad()
 
     # test.moveArm(translateZ=True)
     # time.sleep(5)
@@ -317,7 +357,15 @@ if __name__=='__main__':
 
         print("r_x: ", r_x, " r_y: ", r_y, " t_z: ", t_z)
         test.moveArm(rotate_X=r_x, rotate_Y=r_y, translateZ=t_z)
+
+        pos, q = test.compute_EE_pose()
+
+        print(pos)
         time.sleep(0.2)
+
+    test.moveArm(0,0,0)
+
+    test.reset_world()
 
     # print("Total Rotation around X: ", total_X)
     # print("Total Rotation around Y: ", total_Y)

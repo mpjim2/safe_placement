@@ -15,14 +15,19 @@
 
     <worldbody>
         <light pos="0 0 1000" castshadow="false" />
-        <geom name="ground_plane" type="plane" size="5 5 10" material="MatPlane" rgba="1 1 1 1"/>
+        <geom name="ground_plane" type="plane" size="5 5 10" material="MatPlane" rgba="0 1 0 0"/>
         
         <body name="object" pos="1 1 1">
 			<freejoint/>
-			<geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" />
-			<site name="object_site" pos="0 0 0" size="0.001" rgba="1 0 0 0.5" type="sphere" />
+			<geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" rgba="1 0 0 0.3" />
+            <site name="object_center" pos="0 0 0" size="0.001" rgba="1 0 0 0" type="sphere" />
 		</body>
     
     </worldbody>
+
+    <sensor>
+        <frameyaxis name="object_Y_axis" objtype="site" objname="object_center" />
+        <framepos name="object_pos" objtype="site" objname="object_center"/>
+    </sensor>
 
 </mujoco>

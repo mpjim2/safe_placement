@@ -14,14 +14,16 @@
   <arg name="xacro_args" default="" doc="Additional arguments to pass to panda.urdf.xacro" />
   <arg name="interactive_marker" default="$(eval arg('controller') == 'cartesian_impedance_example_controller')" doc="Should the interactive marker node be started?" />
   <arg name="ns" default="" />
-  <arg name="initial_joint_config" default="$(find franka_mujoco)/config/initial_joint_states.yaml" doc="Location of param file containing the initial joint states" />
-  <arg name="mujoco_plugin_config" default="$(find franka_mujoco)/config/default_mjplugin_config.yaml" doc="Location of param file containing the mujoco plugin config" />
+  <arg name="initial_joint_config" default="$(find safe_placement)/config/joint_states.yaml" doc="Location of param file containing the initial joint states" />
+  <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" />
   <arg name="use_sim_time" doc="should mujoco publish its simulation time as ros time?"/>
   <arg name="wait_for_xml" default="false" doc="Should mujoco_ros wait for an xml in the parameter server?" />
   <arg name="debug" default="false" doc="Should mujoco_ros be run in gdb?" />
   <arg name="profile" default="false" doc="Should mujoco_ros be profiled?" />
   <arg name="realtime" default="1.0" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
   <arg name="render_offscreen" default="false" doc="Should camera streams be rendered and published?" />
+  <arg name="use_fingertips" default="false" doc="Should Shadowhandfingertips be mounted to the gripper fingers?" />
+  <!-- <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" /> -->
 
   <!-- Since robot position and orientation are defined by the xml file, these option currently do not change the robot position, but should match the position and orientation of the model file -->
   <arg name="x"           default="0"     doc="How far forward to place the base of the robot in [m]?" />
@@ -34,7 +36,7 @@
   <param name="/use_sim_time" value="$(arg use_sim_time)"/>
 
   <param name="robot_description"
-         command="xacro $(find franka_description)/robots/panda/panda.urdf.xacro
+         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_s.urdf.xacro
                   gazebo:=true
                   hand:=$(arg use_gripper)
                   arm_id:=$(arg arm_id)
@@ -97,9 +99,10 @@
       </node>
     </group>
   </group>
-
-  <param name="m_ee" value="0.76" if="$(arg use_gripper)" />
-
+    <!-- OG value="0.76" -->
+  
+  <param name="m_ee" value="0.916" if="$(arg use_fingertips)" />
+  <param name="m_ee" value="0.76" unless="$(arg use_fingertips)" />
   <!-- Spawn required ROS controllers -->
   <node pkg="controller_manager"
         type="spawner"
@@ -133,6 +136,6 @@
     <remap to="cartesian_impedance_example_controller/equilibrium_pose" from="equilibrium_pose" />
   </node> -->
 
-  <node  pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find franka_example_controllers)/launch/rviz/franka_description_with_marker.rviz" if="$(arg rviz)"/>
+  <!-- <node  pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find franka_example_controllers)/launch/rviz/franka_description_with_marker.rviz" if="$(arg rviz)"/> -->
 
 </launch>
