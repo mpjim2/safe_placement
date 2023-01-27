@@ -9,5 +9,5 @@ MujocoPlugins:
 
   - type: mujoco_contact_surfaces/MujocoContactSurfacesPlugin
     TactileArrays:
-      - { sensorName: "myrmex_sensor_r", geomName: "myrmex_foam_right", topicName: "/myrmex_16x16_r", updateRate: 50.0, resolution: 0.005 }
-      - { sensorName: "myrmex_sensor_l", geomName: "myrmex_foam_left",  topicName: "/myrmex_16x16_l", updateRate: 50.0, resolution: 0.005 }
+      - { sensorName: "myrmex_sensor_r", geomName: "myrmex_foam_right", topicName: "/myrmex_r", updateRate: 50.0, resolution: 0.005 }
+      - { sensorName: "myrmex_sensor_l", geomName: "myrmex_foam_left",  topicName: "/myrmex_l", updateRate: 50.0, resolution: 0.005 }

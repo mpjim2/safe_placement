@@ -1,1 +1,0 @@
-from gym_safe_placement.envs.gym_env import SafePlacementEnv

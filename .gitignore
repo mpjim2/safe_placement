@@ -1,7 +1,0 @@
-/assets/meshes/
-/assets/panda.xml
-/assets/urdf/
-/.vscode/
-/assets/panda_myrmex_gripper.xml
-**/.vscode
-/gym_safe_placement/envs/gym_safe_placement.egg-info

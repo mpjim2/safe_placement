@@ -11,7 +11,6 @@
         <material name="MatPlane" reflectance="0.05" shininess="0.01" specular="0.01" texrepeat="1 1" texture="texplane" texuniform="true" />
     </asset>
 
-
     <custom>
 		<!-- All custom parameters related to contact surfaces have the prefix cs:: -->
 		<text name="cs::HydroelasticContactRepresentation" data="kTriangle"/>

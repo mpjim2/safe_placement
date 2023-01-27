@@ -9,6 +9,7 @@ import gym
 from gym.spaces import Box, Discrete, Dict
 
 import rospy, rosgraph, roslaunch, rosservice
+from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseStamped, PointStamped, QuaternionStamped, Twist, Vector3Stamped
 from franka_msgs.msg import FrankaState
 from franka_msgs.srv import SetEEFrame, SetLoad
@@ -16,7 +17,7 @@ from tactile_msgs.msg import TactileState
 from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal
 
 from mujoco_ros_msgs.msg import GeomType, GeomProperties, BodyState, ScalarStamped
-from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState
+from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState, SetPause
 import tf.transformations
 import message_filters, actionlib
 import rospkg
@@ -41,6 +42,8 @@ def nparray_to_posestamped(np_pos, np_quat, frame_id="world"):
 
     return pose
 
+def point_to_numpy(point):
+    return np.array([point.x, point.y, point.z])
 
 class SafePlacementEnv(gym.Env):
     metadata = {}
@@ -48,8 +51,6 @@ class SafePlacementEnv(gym.Env):
     def __init__(self, object_params=dict()):
 
         super().__init__()
-
-        rospy.init_node("SafePlacementEnvNode")
 
         self.franka_state_sub = message_filters.Subscriber("franka_state_controller/franka_states", FrankaState)
         self.franka_state_cache = message_filters.Cache(self.franka_state_sub, cache_size=1, allow_headerless=False)
@@ -59,12 +60,20 @@ class SafePlacementEnv(gym.Env):
         self.obj_upright_cache = message_filters.Cache(self.obj_upright_sub, cache_size=1, allow_headerless=False)
         self.obj_upright_cache.registerCallback(self._new_msg_callback)
 
-        self.obj_contact_sub = message_filters.Subscriber("object_touch", PointStamped)
+        self.obj_contact_sub = message_filters.Subscriber("object_pos", PointStamped)
         self.obj_contact_cache = message_filters.Cache(self.obj_contact_sub, cache_size=1, allow_headerless=False)
         self.obj_contact_cache.registerCallback(self._new_msg_callback)
 
-        self.current_msg = {"franka_state" : None, "object_touch" : None, "object_Y_axis" : None}
-        self.last_timestamps = {"franka_state" : 0, "object_touch" : 0, "object_Y_axis" : 0}
+        self.tactile_left_sub = message_filters.Subscriber("/myrmex_l", TactileState)
+        self.tactile_left_cache = message_filters.Cache(self.tactile_left_sub, cache_size=1, allow_headerless=False)
+        self.tactile_left_cache.registerCallback(self._new_msg_callback)
+
+        self.tactile_right_sub = message_filters.Subscriber("/myrmex_r", TactileState)
+        self.tactile_right_cache = message_filters.Cache(self.tactile_left_sub, cache_size=1, allow_headerless=False)
+        self.tactile_right_cache.registerCallback(self._new_msg_callback)
+
+        self.current_msg = {"franka_state" : None, "object_pos" : None, "object_Y_axis" : None, "myrmex_l" : None, "myrmex_r" : None}
+        self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_Y_axis" : 0, "myrmex_l" : 0, "myrmex_r" : 0}
 
         self.action_space = Dict({
             "move_down" : Discrete(2),
@@ -90,9 +99,24 @@ class SafePlacementEnv(gym.Env):
             })
         })
 
+        if not rosgraph.is_master_online(): # check if ros master is already running
+            print("starting launch file...")
+            uuid = roslaunch.rlutil.get_or_generate_uuid(options_runid=None, options_wait_for_master=False)
+            roslaunch.configure_logging(uuid)
+            pkg_path = rospkg.RosPack().get_path("safe_placement")
+            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch","test.launch")], is_core=True)
+            self.launch.start()
+
+        rospy.init_node("SafePlacementEnvNode")
 
         all_services_available = False
-        required_srv = ["/franka_control/set_EE_frame", "/mujoco_server/set_geom_properties", "/mujoco_server/set_body_state", "/franka_control/set_load"]
+        required_srv = ["/franka_control/set_EE_frame", 
+                        "/franka_control/set_load",
+                        "/mujoco_server/set_geom_properties", 
+                        "/mujoco_server/set_body_state", 
+                        "/mujoco_server/reset",
+                        "/mujoco_server/set_pause"]
+
         while not all_services_available:
             service_list = rosservice.get_service_list()
             if not [srv for srv in required_srv if srv not in service_list]:
@@ -100,10 +124,12 @@ class SafePlacementEnv(gym.Env):
                 print("All Services Available!")
 
         self.set_geom_properties = rospy.ServiceProxy("/mujoco_server/set_geom_properties", SetGeomProperties)
-        self.set_body_state = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
-        
-        self.set_load = rospy.ServiceProxy("/franka_control/set_load", SetLoad)
+        self.set_body_state      = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
+        self.reset_world         = rospy.ServiceProxy("/mujoco_server/reset", Empty)
+        self.pause_sim           = rospy.ServiceProxy("/mujoco_server/set_pause", SetPause)
 
+        self.set_load            = rospy.ServiceProxy("/franka_control/set_load", SetLoad)
+        
         self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
 
         #client for MoveAction
@@ -121,14 +147,15 @@ class SafePlacementEnv(gym.Env):
         self.obj_height = 0
         self.obj_types = object_params.get("types", ["box"])
         self.range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
-        self.range_obj_height = object_params.get("range_height", np.array([0.15/2, 0.2/2])) # [m]
-        self.range_obj_wl = object_params.get("range_wl", np.array([0.07/2, 0.12/2])) # [m]; range width and length (requires object type "box")
+        self.range_obj_height = object_params.get("range_height", np.array([0.2/2, 0.3/2])) # [m]
+        self.range_obj_l = object_params.get("range_l", np.array([0.04/2, 0.07/2])) # [m]; range width and length (requires object type "box")
+        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.15  /2])) # [m]; range width and length (requires object type "box")
         self.range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
 
         self.range_obj_x_pos = object_params.get("range_x_pos", np.array([0.275,0.525])) #[m]
         self.range_obj_y_pos = object_params.get("range_y_pos", np.array([-0.2,0.2])) #[m]
 
-
+        self.sensor_thickness = 0.003
 
     def _sample_obj_params(self):
         # sample new object/target type
@@ -142,8 +169,8 @@ class SafePlacementEnv(gym.Env):
         if self.obj_type == "box":
             self.obj_geom_type_value = 6
             # sample object width/2, length/2 and height/2 
-            self.obj_size_0 = np.random.uniform(low=self.range_obj_wl[0], high=self.range_obj_wl[1]) # width/2
-            self.obj_size_1 = np.random.uniform(low=self.range_obj_wl[0], high=self.range_obj_wl[1]) # length/2
+            self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.range_obj_w[1]) # width/2
+            self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.range_obj_l[1]) # length/2
             self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=np.amin(np.array([self.range_obj_height[1], self.obj_size_0, self.obj_size_1]))) # height/2
             self.obj_height = self.obj_size_2
         else:
@@ -156,19 +183,21 @@ class SafePlacementEnv(gym.Env):
             self.obj_height = self.obj_size_1
 
     def _sample_object_pose(self):
-        # sample rotation about z-axis
-        y_angle = np.random.uniform(low=-0.17, high=0.17)
-        # y_angle = 0
-        quat = tf.transformations.quaternion_from_euler(0,0,y_angle)
 
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
 
         position    = transformationEE[:3, -1]
 
-        position[-1] -= self.obj_height/2
-        
-        return position, quat
+        #self.obj_size_0, self.obj_size_1, self.obj_size_2
+
+        pos_z = position[2] - (self.obj_height /2)
+
+        # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
+        # position[0] += x_shift  
+        position[2] = pos_z
+
+        return position
 
     def _pose_quat_from_trafo(self, transformationEE):
         
@@ -187,10 +216,14 @@ class SafePlacementEnv(gym.Env):
     def _get_observation(self, compute_reward=True):
         
         current_obs = self.current_msg['franka_state']
+        reward_obs  = self.current_msg['object_Y_axis']
+        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
 
-        reward_obs  = (self.current_msg['object_Y_axis'], self.current_msg['object_touch'])
         ee_pos, ee_quat, ee_xyz = self._pose_quat_from_trafo(current_obs.O_T_EE)
         pose = np.array((ee_pos, ee_xyz)).reshape(6)
+
+        ee_obj_dist = np.linalg.norm(ee_pos - obj_pos)
+        grasp_ok = ee_obj_dist <= self.obj_height / 2
 
         joint_positions = np.array(current_obs.q)
         joint_torques = np.array(current_obs.tau_J)
@@ -199,7 +232,8 @@ class SafePlacementEnv(gym.Env):
         observation = {"ee_pose" : pose, 
                        "joint_positions" : joint_positions,
                        "joint_torques" : joint_torques,
-                       "joint_velocities" : joint_velocities}
+                       "joint_velocities" : joint_velocities,
+                       "grasp_ok" : grasp_ok}
 
         if compute_reward:
             reward = self._compute_reward(reward_obs[0], reward_obs[1])
@@ -247,10 +281,11 @@ class SafePlacementEnv(gym.Env):
 
         return twist_msg
 
-    def _open_gripper(self):
-        goal = MoveGoal(width=0.08, speed=0.05)
+    def _open_gripper(self, width=0.08):
+        goal = MoveGoal(width=width, speed=0.05)
 
         self.release_client.send_goal(goal)
+        self.release_client.wait_for_result()
 
         success = self.release_client.get_result()
         if not success:
@@ -258,13 +293,13 @@ class SafePlacementEnv(gym.Env):
 
         return success
 
-    def _close_gripper(self, width=0.05, eps=0.0001, speed=0.1, force=10):
+    def _close_gripper(self, width, eps, speed, force):
         
         epsilon = GraspEpsilon(inner=eps, outer=eps)
         goal_ = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)
         
         self.grasp_client.send_goal(goal_)
-        self.grasp_client.wait_for_result(rospy.Duration(3))
+        self.grasp_client.wait_for_result()
 
         success = self.grasp_client.get_result()
 
@@ -273,12 +308,22 @@ class SafePlacementEnv(gym.Env):
 
         return success
 
-    def setLoad(self, mass, F_x_center_load, load_inertia): 
+    def _setLoad(self, mass, load_inertia): 
         
+        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+        
+        transformationEE = self.current_msg['franka_state'].O_T_EE
+        transformationEE = np.array(transformationEE).reshape((4,4), order='F')
+        ee_pos           = transformationEE[:3, -1]
+        
+        #subtract EE to flange transformation
+        ee_pos -= np.array([0, 0, 0.17])
+
+        F_x_center_load = list(ee_pos - obj_pos)
         #Fingertip params
-        mass = 0.078*2 #mass of two ubi fingertips
-        F_x_center_load = [0,0,0.17]
-        load_inertia = [0, 0, 0.000651, 0, 0, 0.000651, 0, 0, 0.000896]
+        # mass = 0.078*2 #mass of two ubi fingertips
+        # F_x_center_load = [0,0,0.17]
+        # load_inertia = [0, 0, 0.000651, 0, 0, 0.000651, 0, 0, 0.000896]
 
         #{0,0,0.17} translation from flange to in between fingers; default for f_x_center
         response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
@@ -304,7 +349,7 @@ class SafePlacementEnv(gym.Env):
 
     def step(self, action):
         
-        terminated = False
+        done = False
         if action['open_gripper'] == 1:
             #Stop movement of arm
             stop_ = self._compute_twist(0, 0, 0)
@@ -313,7 +358,7 @@ class SafePlacementEnv(gym.Env):
             observation, reward = self._get_observation()
             
             self._open_gripper()
-            terminated = True
+            done = True
         else:
             
             twist = self._compute_twist(action['rotate_X']  -1, 
@@ -324,16 +369,55 @@ class SafePlacementEnv(gym.Env):
             
             observation, reward = self._get_observation(compute_reward=False)
 
+            if not observation['grasp_ok']:
+                done = True
         
-        return observation, reward, terminated
+        return observation, reward, done
+
+    def _initial_grasp(self):
+    
+        self._open_gripper()
+        # self.pause_sim(paused=True)
+        
+        self.set_object_params()
+        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=10.0, eps=0.005, speed=0.01)
+        
+        if grasp_success:
+            self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
+            
+            #move upward to pick object up
+            twist = self._compute_twist(0, 0, 1)
+            self.twist_pub.publish(twist)
+            
+            time.sleep(1)
+            twist = self._compute_twist(0, 0, 0)
+            self.twist_pub.publish(twist)
+
+            scaf_geom_type       = GeomType(value=6)
+            scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0, size_1=0, size_2=0, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
+            resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+            if not resp.success:
+                rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
+
+        return grasp_success
 
     def set_object_params(self):
         # sample object type, mass, sliding friction, height, radius, length, width
         self._sample_obj_params()        
 
         # sample object start pose
-        obj_pos, obj_quat = self._sample_object_pose()
-       
+        obj_pos = self._sample_object_pose()
+
+        #compute and spawn scaffold
+
+        scaf_size_2 = obj_pos[-1] - self.obj_size_2
+
+        scaf_geom_type       = GeomType(value=6)
+        scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0.2, size_1=0.3, size_2=scaf_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
+        resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+        if not resp.success:
+            rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
+
         # set object properties
         obj_geom_type = GeomType(value=self.obj_geom_type_value)
         obj_geom_properties = GeomProperties(env_id=0, name="object_geom", type=obj_geom_type, size_0=self.obj_size_0, size_1=self.obj_size_1, size_2=self.obj_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
@@ -341,11 +425,13 @@ class SafePlacementEnv(gym.Env):
         if not resp.success:
             rospy.logerr("SetGeomProperties:failed to set object parameters")
 
-        # set object pose
-        body_state = BodyState(env_id=0, name="object", pose=nparray_to_posestamped(obj_pos, obj_quat), mass=self.obj_mass)
+        # set object pose with mass=0
+        body_state = BodyState(env_id=0, name="object", pose=nparray_to_posestamped(obj_pos, np.array([1, 0, 0, 0])), mass=self.obj_mass)
         resp = self.set_body_state(state=body_state, set_pose=True, set_twist=False, set_mass=True, reset_qpos=False)
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
+
+        
 
     def _new_msg_callback(self, msg):
         topic = msg._connection_header["topic"]
@@ -367,10 +453,26 @@ class SafePlacementEnv(gym.Env):
 
         super().reset(seed=seed)
 
-        twist = self._compute_twist(0, 0, 0)
-        self.twist_pub.publish(twist)
+        success = False
 
-        
+        while not success:
+
+            self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
+            twist = self._compute_twist(0, 0, 0)
+            self.twist_pub.publish(twist)
+
+
+            self.reset_world()
+
+            self._open_gripper()
+
+            success = self._initial_grasp()
+            time.sleep(0.1)
+
+        observation, _ = self._get_observation(compute_reward=False) 
+    
+        info = None
+        return observation, info 
         #Reset robot to initial configuration
         #sample object params
         #spawn and grasp object
@@ -384,15 +486,35 @@ class SafePlacementEnv(gym.Env):
 if __name__=="__main__":
 
     test_env = SafePlacementEnv()
-    # test_env.set_object_params()
 
-    action = test_env.action_space.sample()
-    action['open_gripper'] = 0
 
-    for x in range(20):
-        _ = test_env.step(action)
-        time.sleep(0.5)
-    test_env.reset()
 
-    print("Env reset")
-    time.sleep(1)
+    test_env.reset_world()
+
+    # test_env._open_gripper()
+
+    # time.sleep(2)
+
+    # test_env._close_gripper(width=0.02, force=5.0, eps=0.005, speed=0.1)
+    
+    # for x in range(20):
+    #     action = test_env.action_space.sample()
+    #     action['open_gripper'] = 0
+    #     _ = test_env.step(action)
+    #     time.sleep(0.5)
+    
+    # time.sleep(1)
+    
+    for i in range(10):
+        test_env.reset()
+        print(i)
+        for x in range(4):
+            action = test_env.action_space.sample()
+            action['open_gripper'] = 0
+            _ = test_env.step(action)
+            time.sleep(0.5)
+        test_env.reset()
+        time.sleep(1)
+
+    # print("Env reset")
+    # time.sleep(1)

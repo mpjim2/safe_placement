@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda_ubi_fingertips">
+
+  <!-- Name of this panda -->
+  <xacro:arg name="arm_id" default="panda" />
+  <xacro:arg name="use_gripper" default="true"/>
+  <xacro:include filename="$(find safe_placement)/assets/urdf/myrmex_quick_mount.urdf.xacro" />
+  <!-- Is the robot being simulated in gazebo?" -->
+  <xacro:arg name="gazebo" default="false" />
+
+  <xacro:include filename="$(find franka_description)/robots/panda/panda.urdf.xacro"/>
+  
+  <xacro:myrmex_quick_mount prefix="left" 
+                            connected_to="panda_leftfinger"
+                            rpy="1.57079632679 0 0"
+                            xyz="0 0.01 0.07"/>
+
+  <xacro:myrmex_quick_mount prefix="right" 
+                            connected_to="panda_rightfinger"
+                            rpy="-1.57079632679 0 0"
+                            xyz="0 -0.01 0.07"/>
+  
+</robot>

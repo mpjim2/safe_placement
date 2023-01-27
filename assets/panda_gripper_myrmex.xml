@@ -239,7 +239,7 @@
                                                     <inertial pos="0 0 0.03" mass="0.180" diaginertia="0.0002 0.0002 0.0001" />
                                                     <geom class="visual" mesh="myrmex_quick_mount_visual" />
                                                     <geom class="collision" type="cylinder" size="0.068 0.0137" pos="0 0 0.0136" euler="0 0 0" /> -->
-                                                    
+                                                
                                                     <body name="panda_leftfinger_myrmex_foam_body" pos="0 0 0.05" euler="1.57079632679 0 0">
                                                         <inertial pos="0 0 0" mass="0.005" diaginertia="2e-06 2e-06 1e-06"/>
                                                         <geom name="myrmex_foam_left" type="box" pos="0 0 0" size="0.04 0.04 0.003" rgba="0.5 0.5 0.5 0.5"/>
@@ -320,8 +320,11 @@
 
         <exclude body1="panda_hand" body2="panda_leftfinger_myrmex_quickmount"/>
         <exclude body1="panda_hand" body2="panda_rightfinger_myrmex_quickmount"/> -->
+        
+        <!-- <exclude body1="panda_hand" body2="panda_rightfinger_myrmex_foam_body"/>
+        <exclude body1="panda_hand" body2="panda_leftfinger_myrmex_foam_body"/>
 
-        <!-- <exclude body1="panda_rightfinger" body2="panda_rightfinger_myrmex_foam_body"/>
+        <exclude body1="panda_rightfinger" body2="panda_rightfinger_myrmex_foam_body"/>
         <exclude body1="panda_leftfinger" body2="panda_leftfinger_myrmex_foam_body"/> -->
     </contact>
 

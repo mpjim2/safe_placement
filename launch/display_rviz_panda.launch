@@ -14,7 +14,7 @@
   <arg name="arm_id"      default="panda"/>
 
   <param name="robot_description"
-         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_s.urdf.xacro
+         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_myrmex.urdf.xacro
                   gazebo:=true
                   hand:=$(arg use_gripper)
                   arm_id:=$(arg arm_id)">

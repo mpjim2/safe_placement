@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<robot name="poking_stick" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="poking_stick_generic" params="prefix='' tip_sensor='ubi' connected_to=''">
+  
+  <xacro:unless value="${not connected_to}">
+    <joint name="${prefix}poking_stick_joint" type="fixed">
+        <parent link="${connected_to}"/>
+        <child link="${prefix}poking_stick"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+    </joint>
+  </xacro:unless>
+
+  <link name="${prefix}poking_stick">
+
+    <xacro:if value="${tip_sensor == 'ubi'}">
+      <inertial>
+          <mass value="0.505" /> <!-- mass of metal + stick + ubi -->
+          <origin xyz="0 0 0.0161" /> <!-- from bottom of poking stick = mount flange -->
+          <inertia ixx="0.000651" ixy="0.0" ixz="0.0"
+       iyy="0.000651" iyz="0.0" izz="0.000896" />
+      </inertial>
+    </xacro:if>
+    <xacro:unless value="${tip_sensor == 'ubi'}">
+      <inertial>
+          <mass value="0.427" /> <!-- mass of metal + stick -->
+          <origin xyz="0 0 0.0124" /> <!-- from bottom of poking stick = mount flange -->
+          <inertia ixx="0.000651" ixy="0.0" ixz="0.0"
+       iyy="0.000651" iyz="0.0" izz="0.000896" />
+      </inertial>
+    </xacro:unless>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <xacro:if value="${tip_sensor == 'ubi'}">
+        <mesh scale="0.001 0.001 0.001"
+					 filename="package://agni_description/models/meshes/poking_stick_for_ubi.dae"/>
+        </xacro:if>
+        <xacro:unless value="${tip_sensor == 'ubi'}">
+        <mesh scale="0.001 0.001 0.001"
+					 filename="package://agni_description/models/meshes/poking_stick.dae"/>
+        </xacro:unless>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.0075" rpy="0 0 0" />
+      <geometry>
+        <cylinder radius="0.06725" length="0.015"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 0 ${0.005+0.015}" rpy="0 0 0" />
+      <geometry>
+        <cylinder radius="0.05" length="0.01"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 0 ${0.005+0.010+0.015}" rpy="0 0 0" />
+      <geometry>
+        <cylinder radius="0.025" length="0.01"/>
+      </geometry>
+    </collision>
+    <xacro:if value="${tip_sensor == 'ubi'}">
+      <collision>
+        <origin xyz="0 0 0.07375" rpy="0 0 0" />
+        <geometry>
+          <cylinder radius="0.0075" length="0.1445"/>
+        </geometry>
+      </collision>
+    </xacro:if>
+    <xacro:unless value="${tip_sensor == 'ubi'}">
+      <collision>
+        <origin xyz="0 0 0.08875" rpy="0 0 0" />
+        <geometry>
+          <cylinder radius="0.0075" length="0.1475"/>
+        </geometry>
+      </collision>
+      <collision>
+        <origin xyz="0 0 0.1625" rpy="0 0 0" />
+        <geometry>
+          <sphere radius="0.0075"/>
+        </geometry>
+      </collision>
+    </xacro:unless>
+  </link>
+
+  <xacro:if value="${tip_sensor == 'ubi'}">
+    <joint name="${prefix}stick_to_ubi" type="fixed">
+      <origin xyz="0 0 0.13605" rpy="0 0 0"/>
+      <parent link="${prefix}poking_stick"/>
+      <child link="${prefix}ffdistal"/>
+    </joint>
+
+    <link name="${prefix}ffdistal">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh scale="0.001 0.001 0.001"
+             filename="package://sr_description/meshes/hand/ubi_tactiles/ubi_tip_visual.dae"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh scale="0.001 0.001 0.001"
+             filename="package://sr_description/meshes/hand/ubi_tactiles/ubi_tip_collision.dae"/>
+        </geometry>
+      </collision>
+    </link>
+  </xacro:if>
+
+  <gazebo reference="${prefix}poking_stick">
+  </gazebo>
+  </xacro:macro>
+</robot>

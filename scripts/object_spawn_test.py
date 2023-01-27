@@ -35,7 +35,7 @@ def sample_obj_params(object_params=dict()):
     obj_types = object_params.get("types", ["box"])
     range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
     range_obj_height = object_params.get("range_height", np.array([0.15/2, 0.2/2])) # [m]
-    range_obj_wl = object_params.get("range_wl", np.array([0.07/2, 0.12/2])) # [m]; range width and length (requires object type "box")
+    range_obj_wl = object_params.get("range_wl", np.array([0.04/2, 0.07/2])) # [m]; range width and length (requires object type "box")
     range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
     range_obj_sliding_fric = object_params.get("range_sliding_fric", np.array([0.69, 0.7])) # ignore torsional friction, because object cannot be a sphere
     
@@ -152,7 +152,7 @@ class ObjectPoseSpawn:
                         "/mujoco_server/set_geom_properties", 
                         "/mujoco_server/set_body_state", 
                         "/mujoco_server/reset",
-                        "/mujoco_server/pause"]
+                        "/mujoco_server/set_pause"]
 
         while not all_services_available:
             service_list = rosservice.get_service_list()
@@ -248,7 +248,7 @@ class ObjectPoseSpawn:
 
         return success
 
-    def close_gripper(self, width=0.05, eps=0.0001, speed=0.1, force=20):
+    def close_gripper(self, width=0.05, eps=0.0001, speed=, force=20):
         
         epsilon = GraspEpsilon(inner=eps, outer=eps)
         goal_ = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)

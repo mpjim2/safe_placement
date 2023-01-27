@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<robot name="ubi_fingertip" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:macro name="ubi_fingertip" params="prefix='' connected_to=''">
+
+    <xacro:if value="${prefix == 'left'}">
+        <joint name="${prefix}_${connected_to}_joint" type="fixed">
+            <origin xyz="0 0 0.02705" rpy="0 0 0"/>
+            <parent link="${connected_to}"/>
+            <child link="${prefix}ffdistal"/>
+        </joint>
+    </xacro:if>
+    <xacro:unless value="${prefix == 'left'}">
+        <joint name="${prefix}_${connected_to}_joint" type="fixed">
+            <origin xyz="0 0 0.02705" rpy="0 0 ${pi}"/>
+            <parent link="${connected_to}"/>
+            <child link="${prefix}ffdistal"/>
+        </joint>
+    </xacro:unless>
+
+    <link name="${prefix}ffdistal">
+    <inertial>
+        <mass value="0.078" /> <!-- mass of ubi -->
+        <origin xyz="0 0 0.0037" /> 
+        <inertia ixx="0.000651" ixy="0.0" ixz="0.0"
+        iyy="0.000651" iyz="0.0" izz="0.000896" />
+    </inertial>
+    <visual>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+        <mesh scale="0.001 0.001 0.001"
+            filename="package://sr_description/meshes/hand/ubi_tactiles/ubi_tip_visual.dae"/>
+        </geometry>
+    </visual>
+    <collision>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+        <mesh scale="0.001 0.001 0.001"
+            filename="package://sr_description/meshes/hand/ubi_tactiles/ubi_tip_collision.dae"/>
+        </geometry>
+    </collision>
+    </link>
+    
+    <gazebo reference="${prefix}_fingertip">
+    </gazebo>
+    </xacro:macro>
+</robot>

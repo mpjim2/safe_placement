@@ -16,7 +16,7 @@
   <arg name="ns" default="" />
   <arg name="initial_joint_config" default="$(find safe_placement)/config/joint_states.yaml" doc="Location of param file containing the initial joint states" />
   <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" />
-  <arg name="use_sim_time" doc="should mujoco publish its simulation time as ros time?"/>
+  <arg name="use_sim_time" default="false" doc="should mujoco publish its simulation time as ros time?"/>
   <arg name="wait_for_xml" default="false" doc="Should mujoco_ros wait for an xml in the parameter server?" />
   <arg name="debug" default="false" doc="Should mujoco_ros be run in gdb?" />
   <arg name="profile" default="false" doc="Should mujoco_ros be profiled?" />
@@ -36,7 +36,7 @@
   <param name="/use_sim_time" value="$(arg use_sim_time)"/>
 
   <param name="robot_description"
-         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_s.urdf.xacro
+         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_myrmex.urdf.xacro
                   gazebo:=true
                   hand:=$(arg use_gripper)
                   arm_id:=$(arg arm_id)
@@ -100,9 +100,10 @@
     </group>
   </group>
     <!-- OG value="0.76" -->
-  
+<!--   
   <param name="m_ee" value="0.916" if="$(arg use_fingertips)" />
-  <param name="m_ee" value="0.76" unless="$(arg use_fingertips)" />
+  <param name="m_ee" value="0.76" unless="$(arg use_fingertips)" /> -->
+  <param name="m_ee" value="0.77" />
   <!-- Spawn required ROS controllers -->
   <node pkg="controller_manager"
         type="spawner"

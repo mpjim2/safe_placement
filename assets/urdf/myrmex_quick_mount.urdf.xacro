@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<robot name="myrmex_quick_mount" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="myrmex_quick_mount" params="prefix:='' connected_to='' xyz='0 0 0' rpy='0 0 0'">
+    <xacro:include filename="$(find myrmex_description)/models/myrmex_tactile_surface.urdf.xacro" />
+    
+    <xacro:property name="prefix_" value="${prefix + '_' if prefix else ''}" />
+
+    <xacro:unless value="${not connected_to}">
+      <joint name="${prefix_}myrmex_fixed_joint" type="fixed">
+        <parent link="${connected_to}"/>
+        <child link="${prefix_}myrmex_quick_mount"/>
+        <origin rpy="${rpy}" xyz="${xyz}"/>
+      </joint>
+    </xacro:unless>
+
+    <link name="${prefix_}myrmex_quick_mount">
+       <inertial>
+        <origin xyz="0 0 0.03" rpy="0 0 0" />
+        <mass value="0.180" />
+        <inertia ixx="0.0002" ixy="0.0" ixz="0.0"
+        iyy="0.0002" iyz="0.0" izz="0.0001" />
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh scale="0.001 0.001 0.001"
+                filename="package://myrmex_description/models/meshes/myrmex_quick_mount.dae"/>
+        </geometry>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0.00797" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.06725" length="0.01584"/>
+        </geometry>
+      </collision>
+      <collision>
+        <origin xyz="0 0 0.02159" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.060" length="0.0115"/>
+        </geometry>
+      </collision>
+    </link>
+
+    <xacro:myrmex_tactile_surface prefix="${prefix}" parent="${prefix_}myrmex_quick_mount"/>
+  </xacro:macro>
+
+</robot>
