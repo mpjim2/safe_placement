@@ -20,7 +20,7 @@
   <arg name="wait_for_xml" default="false" doc="Should mujoco_ros wait for an xml in the parameter server?" />
   <arg name="debug" default="false" doc="Should mujoco_ros be run in gdb?" />
   <arg name="profile" default="false" doc="Should mujoco_ros be profiled?" />
-  <arg name="realtime" default="1.0" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
+  <arg name="realtime" default="0.1" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
   <arg name="render_offscreen" default="false" doc="Should camera streams be rendered and published?" />
   <arg name="use_fingertips" default="false" doc="Should Shadowhandfingertips be mounted to the gripper fingers?" />
   <!-- <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" /> -->

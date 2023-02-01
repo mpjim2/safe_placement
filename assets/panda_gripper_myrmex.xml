@@ -1,5 +1,6 @@
 <mujocoinclude>
     <option collision="all" timestep="0.001" gravity="0 0 -9.81" cone="elliptic" />
+    <size nconmax="3000" njmax="4000"/>
     <compiler angle="radian" />
 
     <asset>
