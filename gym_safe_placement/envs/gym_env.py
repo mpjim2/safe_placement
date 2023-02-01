@@ -24,10 +24,16 @@ import rospkg
 
 import time
 
+
+def rotate_vec(v, q):
+    return q.rotate(v)
+
 def quat_dot(q1, q2):
     return q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3]
 
-
+def to_msec(stamp):
+    return int(stamp.to_nsec()*1e-6)
+    
 def nparray_to_posestamped(np_pos, np_quat, frame_id="world"):
     pose = PoseStamped()
     pose.header.stamp = rospy.Time.now()
@@ -42,6 +48,9 @@ def nparray_to_posestamped(np_pos, np_quat, frame_id="world"):
 
     return pose
 
+def quaternion_to_numpy(quaternion):
+    return np.array([quaternion.w, quaternion.x, quaternion.y, quaternion.z])
+
 def point_to_numpy(point):
     return np.array([point.x, point.y, point.z])
 
@@ -52,28 +61,33 @@ class SafePlacementEnv(gym.Env):
 
         super().__init__()
 
+        self.myrmex_max_val = 0.8
+
         self.franka_state_sub = message_filters.Subscriber("franka_state_controller/franka_states", FrankaState)
         self.franka_state_cache = message_filters.Cache(self.franka_state_sub, cache_size=1, allow_headerless=False)
         self.franka_state_cache.registerCallback(self._new_msg_callback)
 
-        self.obj_upright_sub = message_filters.Subscriber("object_Z_axis", Vector3Stamped)
-        self.obj_upright_cache = message_filters.Cache(self.obj_upright_sub, cache_size=1, allow_headerless=False)
-        self.obj_upright_cache.registerCallback(self._new_msg_callback)
+        self.obj_quat_sub = message_filters.Subscriber("object_quat", QuaternionStamped)
+        self.obj_quat_cache = message_filters.Cache(self.obj_quat_sub, cache_size=1, allow_headerless=False)
+        self.obj_quat_cache.registerCallback(self._new_msg_callback)
 
-        self.obj_contact_sub = message_filters.Subscriber("object_pos", PointStamped)
-        self.obj_contact_cache = message_filters.Cache(self.obj_contact_sub, cache_size=1, allow_headerless=False)
-        self.obj_contact_cache.registerCallback(self._new_msg_callback)
+        self.obj_pos_sub = message_filters.Subscriber("object_pos", PointStamped)
+        self.obj_pos_cache = message_filters.Cache(self.obj_pos_sub, cache_size=1, allow_headerless=False)
+        self.obj_pos_cache.registerCallback(self._new_msg_callback)
 
         self.tactile_left_sub = message_filters.Subscriber("/myrmex_l", TactileState)
         self.tactile_left_cache = message_filters.Cache(self.tactile_left_sub, cache_size=1, allow_headerless=False)
         self.tactile_left_cache.registerCallback(self._new_msg_callback)
 
         self.tactile_right_sub = message_filters.Subscriber("/myrmex_r", TactileState)
-        self.tactile_right_cache = message_filters.Cache(self.tactile_left_sub, cache_size=1, allow_headerless=False)
+        self.tactile_right_cache = message_filters.Cache(self.tactile_right_sub, cache_size=1, allow_headerless=False)
         self.tactile_right_cache.registerCallback(self._new_msg_callback)
 
-        self.current_msg = {"franka_state" : None, "object_pos" : None, "object_Y_axis" : None, "myrmex_l" : None, "myrmex_r" : None}
-        self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_Y_axis" : 0, "myrmex_l" : 0, "myrmex_r" : 0}
+        self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
+        self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
+
+        # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
+        # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
         self.action_space = Dict({
             "move_down" : Discrete(2),
@@ -85,19 +99,29 @@ class SafePlacementEnv(gym.Env):
         self.observation_space = Dict({
             "observation" : Dict({
                 "ee_pose" : Box( low=np.array([-np.inf, -np.inf, -np.inf, -np.pi, -np.pi, -np.pi]), 
-                                                high=np.array([np.inf, np.inf, np.inf, np.pi, np.pi, np.pi]),
-                                                dtype=np.float64),
+                                 high=np.array([np.inf, np.inf, np.inf, np.pi, np.pi, np.pi]),
+                                 dtype=np.float64),
+                
                 "joint_positions" : Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]), 
                                        high=np.array([2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973]),
                                        dtype=np.float64),
+                
                 "joint_torques" : Box(low=np.array([-87, -87, -87, -87, -12, -12, -12]),
-                                        high=np.array([87, 87, 87, 87, 12, 12, 12]),
-                                        dtype=np.float64),
-                "joint_velocities" : Box(low=np.array([2.175, 2.175, 2.175, 2.175, 2.61, 2.61, 2.61]),
-                                         high=np.array([-2.175, -2.175, -2.175, -2.175, -2.61, -2.61, -2.61]),
-                                         dtype=np.float64)
+                                      high=np.array([87,  87,  87,  87,  12,  12,  12]),
+                                      dtype=np.float64),
+                
+                "joint_velocities" : Box(low=np.array([-2.175, -2.175, -2.175, -2.175, -2.61, -2.61, -2.61]),
+                                         high=np.array([  2.175,  2.175,  2.175,  2.175,  2.61,  2.61,  2.61]),
+                                         dtype=np.float64),
+                
+                "myrmex_l" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
+                
+                "myrmex_r" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
+
+                "time_diff": Box(low=0, high=np.inf, shape=(len(self.current_msg),), dtype=np.int64)
             })
         })
+
 
         if not rosgraph.is_master_online(): # check if ros master is already running
             print("starting launch file...")
@@ -157,6 +181,7 @@ class SafePlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.003
 
+
     def _sample_obj_params(self):
         # sample new object/target type
         idx_type = np.random.randint(low=0, high=len(self.obj_types))
@@ -213,34 +238,39 @@ class SafePlacementEnv(gym.Env):
         
         return position, orientation_q, orientation_xyz
 
-    def _get_observation(self, compute_reward=True):
+    def _get_obs(self):
         
         current_obs = self.current_msg['franka_state']
-        reward_obs  = self.current_msg['object_Y_axis']
-        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
-
+        
         ee_pos, ee_quat, ee_xyz = self._pose_quat_from_trafo(current_obs.O_T_EE)
         pose = np.array((ee_pos, ee_xyz)).reshape(6)
 
-        ee_obj_dist = np.linalg.norm(ee_pos - obj_pos)
-        grasp_ok = ee_obj_dist <= self.obj_height / 2
+        # ee_obj_dist = np.linalg.norm(ee_pos - obj_pos)
 
-        joint_positions = np.array(current_obs.q)
-        joint_torques = np.array(current_obs.tau_J)
-        joint_velocities = np.array(current_obs.dq)
+        joint_positions = np.array(current_obs.q, dtype=np.float64)
+        joint_torques = np.array(current_obs.tau_J, dtype=np.float64)
+        joint_velocities = np.array(current_obs.dq, dtype=np.float64)
+        
+        print(self.current_msg["myrmex_l"].sensors[0])
+        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(16*16)
+        myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
+
+        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(16*16)
+        myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
+
+        time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
 
         observation = {"ee_pose" : pose, 
                        "joint_positions" : joint_positions,
                        "joint_torques" : joint_torques,
                        "joint_velocities" : joint_velocities,
-                       "grasp_ok" : grasp_ok}
+                       "myrmex_l" : myrmex_data_l,
+                       "myrmex_r" : myrmex_data_r,
+                       "time_diff" : time_diff
+                       }
 
-        if compute_reward:
-            reward = self._compute_reward(reward_obs[0], reward_obs[1])
-        else:
-            reward = 0
 
-        return observation, reward
+        return {"observation" : observation}
 
     def _compute_twist(self, rotate_X, rotate_Y, translate_Z):
 
@@ -330,10 +360,19 @@ class SafePlacementEnv(gym.Env):
         
         return response.success
 
-    def _compute_reward(self, obj_Y, obj_h):
+    def _compute_reward(self):
         
+        #object Y-Value in World Frame
+        obj_h = point_to_numpy(self.current_msg['object_pos'].point)[1]        
+
+        #object Y-Axis in World frame
+        quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
+        quat = pq.Quaternion(quat)
+
+        y_axis = rotate_vec(np.array([0, 1, 0]), quat)
+
         # dot product of world Y and object Y axis
-        uprightnes = np.dot(np.array([0, 1, 0]), np.array(obj_Y))
+        uprightnes = np.dot(np.array([0, 1, 0]), y_axis)
 
         # distance of object to floor
         floor_closeness = self.obj_height/2 - obj_h
@@ -355,34 +394,40 @@ class SafePlacementEnv(gym.Env):
             stop_ = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(stop_)
             
-            observation, reward = self._get_observation()
+            observation = self._get_obs()
             
             self._open_gripper()
             done = True
+
+            reward = self._compute_reward()
+        
         else:
             
+            reward = 0
+
             twist = self._compute_twist(action['rotate_X']  -1, 
                                         action['rotate_Y']  -1, 
                                         action['move_down'] -1)
 
             self.twist_pub.publish(twist)
             
-            observation, reward = self._get_observation(compute_reward=False)
-
-            if not observation['grasp_ok']:
-                done = True
+            observation = self._get_obs()
         
-        return observation, reward, done
+        return observation, reward, done, False, {'info' : None}
 
     def _initial_grasp(self):
-    
+        
+        print('OPEN GRIPPER')
         self._open_gripper()
         # self.pause_sim(paused=True)
         
         self.set_object_params()
-        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=10.0, eps=0.005, speed=0.01)
+
+        print('CLOSE GRIPPER')
+        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=5.0, eps=0.005, speed=0.01)
         
         if grasp_success:
+            print('GRASP SUCCESSFUL')
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
             
             #move upward to pick object up
@@ -409,7 +454,6 @@ class SafePlacementEnv(gym.Env):
         obj_pos = self._sample_object_pose()
 
         #compute and spawn scaffold
-
         scaf_size_2 = obj_pos[-1] - self.obj_size_2
 
         scaf_geom_type       = GeomType(value=6)
@@ -448,7 +492,7 @@ class SafePlacementEnv(gym.Env):
                     return
                 self.last_timestamps[key[0]] = self.current_msg[key[0]].header.stamp # remember timestamp of old message
             self.current_msg[key[0]] = msg
-
+          
     def reset(self, seed=None):
 
         super().reset(seed=seed)
@@ -461,7 +505,6 @@ class SafePlacementEnv(gym.Env):
             twist = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(twist)
 
-
             self.reset_world()
 
             self._open_gripper()
@@ -469,9 +512,9 @@ class SafePlacementEnv(gym.Env):
             success = self._initial_grasp()
             time.sleep(0.1)
 
-        observation, _ = self._get_observation(compute_reward=False) 
+        observation = self._get_obs() 
     
-        info = None
+        info = {'X' : None}
         return observation, info 
         #Reset robot to initial configuration
         #sample object params
@@ -479,42 +522,6 @@ class SafePlacementEnv(gym.Env):
         #         
 
     def close(self):
-        pass
+        if "self.launch" in locals():
+            self.launch.stop()
 
-
-
-if __name__=="__main__":
-
-    test_env = SafePlacementEnv()
-
-
-
-    test_env.reset_world()
-
-    # test_env._open_gripper()
-
-    # time.sleep(2)
-
-    # test_env._close_gripper(width=0.02, force=5.0, eps=0.005, speed=0.1)
-    
-    # for x in range(20):
-    #     action = test_env.action_space.sample()
-    #     action['open_gripper'] = 0
-    #     _ = test_env.step(action)
-    #     time.sleep(0.5)
-    
-    # time.sleep(1)
-    
-    for i in range(10):
-        test_env.reset()
-        print(i)
-        for x in range(4):
-            action = test_env.action_space.sample()
-            action['open_gripper'] = 0
-            _ = test_env.step(action)
-            time.sleep(0.5)
-        test_env.reset()
-        time.sleep(1)
-
-    # print("Env reset")
-    # time.sleep(1)
