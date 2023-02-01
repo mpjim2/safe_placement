@@ -52,7 +52,11 @@
 
   <rosparam file="$(find safe_placement)/config/franka_hw_sim.yaml" subst_value="true" />
   <rosparam file="$(find safe_placement)/config/sim_controllers.yaml" subst_value="true" />
+  <rosparam file="$(find safe_placement)/config/initial_joint_states.yaml" subst_value="true" />
+  
   <rosparam file="$(arg mujoco_plugin_config)" subst_value="true" />
+
+  <param name="franka_state_controller/publish_rate" value="100" />
 
   <env name="ROSCONSOLE_FORMAT" value="[${severity}] [${time}] [${logger}] [${node}]: ${message}"/>
   <env if="$(arg verbose)" name="ROSCONSOLE_CONFIG_FILE"

@@ -251,7 +251,6 @@ class SafePlacementEnv(gym.Env):
         joint_torques = np.array(current_obs.tau_J, dtype=np.float64)
         joint_velocities = np.array(current_obs.dq, dtype=np.float64)
         
-        print(self.current_msg["myrmex_l"].sensors[0])
         myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(16*16)
         myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
@@ -417,17 +416,14 @@ class SafePlacementEnv(gym.Env):
 
     def _initial_grasp(self):
         
-        print('OPEN GRIPPER')
         self._open_gripper()
         # self.pause_sim(paused=True)
         
         self.set_object_params()
 
-        print('CLOSE GRIPPER')
         grasp_success = self._close_gripper(width=self.obj_size_1*2, force=5.0, eps=0.005, speed=0.01)
         
         if grasp_success:
-            print('GRASP SUCCESSFUL')
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
             
             #move upward to pick object up

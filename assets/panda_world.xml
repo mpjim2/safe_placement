@@ -46,7 +46,7 @@
     </worldbody>
 
     <sensor>
-        <frameyaxis name="object_Y_axis" objtype="site" objname="object_center" />
+        <framequat name="object_quat" objtype="site" objname="object_center" />
         <framepos name="object_pos" objtype="site" objname="object_center"/>
     </sensor>
 

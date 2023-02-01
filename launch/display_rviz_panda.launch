@@ -19,6 +19,7 @@
                   hand:=$(arg use_gripper)
                   arm_id:=$(arg arm_id)">
   </param>
+  <rosparam file="$(find safe_placement)/config/initial_joint_states.yaml" subst_value="true" />
 
   <node if="$(arg gui)" name="joint_state_publisher" pkg="joint_state_publisher_gui" type="joint_state_publisher_gui" />
   <node unless="$(arg gui)" name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
