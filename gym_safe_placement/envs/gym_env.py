@@ -171,7 +171,7 @@ class SafePlacementEnv(gym.Env):
         self.obj_height = 0
         self.obj_types = object_params.get("types", ["box"])
         self.range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
-        self.range_obj_height = object_params.get("range_height", np.array([0.2/2, 0.3/2])) # [m]
+        self.range_obj_height = object_params.get("range_height", np.array([0.1/2, 0.1/2])) # [m]
         self.range_obj_l = object_params.get("range_l", np.array([0.04/2, 0.07/2])) # [m]; range width and length (requires object type "box")
         self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.15  /2])) # [m]; range width and length (requires object type "box")
         self.range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
@@ -196,7 +196,7 @@ class SafePlacementEnv(gym.Env):
             # sample object width/2, length/2 and height/2 
             self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.range_obj_w[1]) # width/2
             self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.range_obj_l[1]) # length/2
-            self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=np.amin(np.array([self.range_obj_height[1], self.obj_size_0, self.obj_size_1]))) # height/2
+            self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=self.range_obj_height[1] ) # height/2
             self.obj_height = self.obj_size_2
         else:
             # self.obj_type == "cylinder"
@@ -216,8 +216,11 @@ class SafePlacementEnv(gym.Env):
 
         #self.obj_size_0, self.obj_size_1, self.obj_size_2
 
-        pos_z = position[2] - (self.obj_height /2)
+        z_shift = np.random.uniform(low=-0.035, high=0.03)
+        pos_z = position[2] - self.obj_height + z_shift
 
+        x_shift = np.random.uniform(low=-self.obj_size_0, high=self.obj_size_0)
+        position[0] += x_shift
         # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
         # position[0] += x_shift  
         position[2] = pos_z
@@ -512,10 +515,7 @@ class SafePlacementEnv(gym.Env):
     
         info = {'X' : None}
         return observation, info 
-        #Reset robot to initial configuration
-        #sample object params
-        #spawn and grasp object
-        #         
+    
 
     def close(self):
         if "self.launch" in locals():
