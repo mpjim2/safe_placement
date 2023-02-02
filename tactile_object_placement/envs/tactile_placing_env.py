@@ -54,7 +54,7 @@ def quaternion_to_numpy(quaternion):
 def point_to_numpy(point):
     return np.array([point.x, point.y, point.z])
 
-class SafePlacementEnv(gym.Env):
+class TactileObjectPlacementEnv(gym.Env):
     metadata = {}
 
     def __init__(self, object_params=dict()):
