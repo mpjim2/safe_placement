@@ -1,0 +1,6 @@
+setup.py
+tactile_object_placement.egg-info/PKG-INFO
+tactile_object_placement.egg-info/SOURCES.txt
+tactile_object_placement.egg-info/dependency_links.txt
+tactile_object_placement.egg-info/requires.txt
+tactile_object_placement.egg-info/top_level.txt

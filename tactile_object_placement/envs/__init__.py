@@ -1,1 +1,1 @@
-from gym_safe_placement.envs.gym_env import SafePlacementEnv
+from tactile_object_placement.envs.tactile_placing_env import TactileObjectPlacementEnv
