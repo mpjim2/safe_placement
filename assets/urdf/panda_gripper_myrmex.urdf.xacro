@@ -10,24 +10,76 @@
 
   <xacro:include filename="$(find franka_description)/robots/panda/panda.urdf.xacro"/>
   
-  <!-- <xacro:myrmex_quick_mount prefix="left" 
-                            connected_to="panda_leftfinger"
-                            rpy="1.57079632679 0 0"
-                            xyz="0 0.01 0.07"/>
+  <joint name="panda_left_myrmex_backplate_joint" type="fixed">
+    <parent link="panda_leftfinger" />
+    <child link="panda_left_myrmex_backplate" />
+    <origin rpy="1.57079632679 0 0" xyz="0 0.00314 0.07"/>
+  </joint>
+  
+  <link name="panda_left_myrmex_backplate">
+    <inertial>
+      <origin xyz="0 0 0.0" rpy="0 0 0" />
+      <mass value="0.005" />
+      <inertia ixx="0.000002" ixy="0.0" ixz="0.0"
+      iyy="0.000002" iyz="0.0" izz="0.000001" />
+    </inertial>
+    <visual>
 
-  <xacro:myrmex_quick_mount prefix="right" 
-                            connected_to="panda_rightfinger"
-                            rpy="-1.57079632679 0 0"
-                            xyz="0 -0.01 0.07"/> -->
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="blue">
+        <color rgba="0 0 1 1"/>
+      </material>
+      <geometry>
+          <box size="0.095 0.095 0.003"/>
+      </geometry>
+    </visual>
+    <collision name="panda_left_myrmex_backplate">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.095 0.095 0.003"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="panda_right_myrmex_backplate_joint" type="fixed">
+    <parent link="panda_rightfinger" />
+    <child link="panda_right_myrmex_backplate" />
+    <origin rpy="-1.57079632679 0 0" xyz="0 -0.00314 0.07"/>
+  </joint>
+  
+  <link name="panda_right_myrmex_backplate">
+    <inertial>
+      <origin xyz="0 0 0.0" rpy="0 0 0" />
+      <mass value="0.005" />
+      <inertia ixx="0.000002" ixy="0.0" ixz="0.0"
+      iyy="0.000002" iyz="0.0" izz="0.000001" />
+    </inertial>
+    <visual>
+
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <material name="blue">
+        <color rgba="0 0 1 1"/>
+      </material>
+      <geometry>
+          <box size="0.095 0.095 0.003"/>
+      </geometry>
+    </visual>
+    <collision name="panda_right_myrmex_backplate">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.095 0.095 0.003"/>
+      </geometry>
+    </collision>
+  </link>
 
   <xacro:myrmex_tactile_surface prefix="left"
-                                parent="panda_leftfinger"
-                                rpy="1.57079632679 0 0"
-                                xyz="0 0.00314 0.07"/>
+                                parent="panda_left_myrmex_backplate"
+                                rpy="0 0 0"
+                                xyz="0 0 0.003"/>
 
   <xacro:myrmex_tactile_surface prefix="right"
-                                parent="panda_rightfinger" 
-                                rpy="-1.57079632679 0 0"
-                                xyz="0 -0.00314 0.07"/>
+                                parent="panda_right_myrmex_backplate" 
+                                rpy="0 0 0"
+                                xyz="0 0 0.003"/>
   
 </robot>
