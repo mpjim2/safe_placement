@@ -90,9 +90,9 @@ class TactileObjectPlacementEnv(gym.Env):
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
         self.action_space = Dict({
-            "move_down" : Discrete(2),
-            "rotate_X" : Discrete(3),
-            "rotate_Y" : Discrete(3),
+            "move_down" : Discrete(2, start=-1),
+            "rotate_X" : Discrete(3, start=-1),
+            "rotate_Y" : Discrete(3, start=-1),
             "open_gripper" : Discrete(2)
         })
 
@@ -217,10 +217,10 @@ class TactileObjectPlacementEnv(gym.Env):
         #self.obj_size_0, self.obj_size_1, self.obj_size_2
 
         z_shift = np.random.uniform(low=-0.035, high=0.03)
-        pos_z = position[2] - self.obj_height + z_shift
+        pos_z = position[2] - self.obj_height  + z_shift
 
-        x_shift = np.random.uniform(low=-self.obj_size_0, high=self.obj_size_0)
-        position[0] += x_shift
+        # x_shift = np.random.uniform(low=-self.obj_size_0, high=self.obj_size_0)
+        # position[0] += x_shift
         # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
         # position[0] += x_shift  
         position[2] = pos_z
@@ -407,9 +407,9 @@ class TactileObjectPlacementEnv(gym.Env):
             
             reward = 0
 
-            twist = self._compute_twist(action['rotate_X']  -1, 
-                                        action['rotate_Y']  -1, 
-                                        action['move_down'] -1)
+            twist = self._compute_twist(action['rotate_X'], 
+                                        action['rotate_Y'], 
+                                        action['move_down'])
 
             self.twist_pub.publish(twist)
             
@@ -424,7 +424,7 @@ class TactileObjectPlacementEnv(gym.Env):
         
         self.set_object_params()
 
-        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=5.0, eps=0.005, speed=0.01)
+        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=10.0, eps=0.005, speed=0.01)
         
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
@@ -495,7 +495,7 @@ class TactileObjectPlacementEnv(gym.Env):
     def reset(self, seed=None):
 
         super().reset(seed=seed)
-
+        self._open_gripper()
         success = False
 
         while not success:
