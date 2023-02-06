@@ -17,7 +17,7 @@ from tactile_msgs.msg import TactileState
 from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal
 
 from mujoco_ros_msgs.msg import GeomType, GeomProperties, BodyState, ScalarStamped
-from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState, SetPause
+from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState, SetPause, SetGravity, GetGravity
 import tf.transformations
 import message_filters, actionlib
 import rospkg
@@ -139,7 +139,9 @@ class TactileObjectPlacementEnv(gym.Env):
                         "/mujoco_server/set_geom_properties", 
                         "/mujoco_server/set_body_state", 
                         "/mujoco_server/reset",
-                        "/mujoco_server/set_pause"]
+                        "/mujoco_server/set_pause",
+                        "/mujoco_server/set_gravity",
+                        "/mujoco_server/get_gravity"]
 
         while not all_services_available:
             service_list = rosservice.get_service_list()
@@ -151,6 +153,8 @@ class TactileObjectPlacementEnv(gym.Env):
         self.set_body_state      = rospy.ServiceProxy("/mujoco_server/set_body_state", SetBodyState)
         self.reset_world         = rospy.ServiceProxy("/mujoco_server/reset", Empty)
         self.pause_sim           = rospy.ServiceProxy("/mujoco_server/set_pause", SetPause)
+        self.set_gravity         = rospy.ServiceProxy("mujoco_server/set_gravity", SetGravity)
+        self.get_gravity         = rospy.ServiceProxy("mujoco_server/get_gravity", GetGravity)
 
         self.set_load            = rospy.ServiceProxy("/franka_control/set_load", SetLoad)
         
@@ -214,18 +218,21 @@ class TactileObjectPlacementEnv(gym.Env):
 
         position    = transformationEE[:3, -1]
 
+        y_angle = np.random.uniform(low=-np.pi, high=np.pi)
+        quat = tf.transformations.quaternion_from_euler(0,y_angle,0)
+
         #self.obj_size_0, self.obj_size_1, self.obj_size_2
 
         z_shift = np.random.uniform(low=-0.035, high=0.03)
-        pos_z = position[2] - self.obj_height  + z_shift
+        pos_z = position[2] - self.obj_height  #+ z_shift
 
-        # x_shift = np.random.uniform(low=-self.obj_size_0, high=self.obj_size_0)
-        # position[0] += x_shift
-        # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
+        # x_shift = np.random.uniform(low=-self.obj_size_0/2, high=self.obj_size_0/2)
+        # # position[0] += x_shift
+        # # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
         # position[0] += x_shift  
         position[2] = pos_z
 
-        return position
+        return position, quat
 
     def _pose_quat_from_trafo(self, transformationEE):
         
@@ -422,26 +429,31 @@ class TactileObjectPlacementEnv(gym.Env):
         self._open_gripper()
         # self.pause_sim(paused=True)
         
-        self.set_object_params()
+        resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
+        if resp:    
+
+            self.set_object_params()
+
 
         grasp_success = self._close_gripper(width=self.obj_size_1*2, force=10.0, eps=0.005, speed=0.01)
         
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
-            
-            #move upward to pick object up
-            twist = self._compute_twist(0, 0, 1)
-            self.twist_pub.publish(twist)
-            
-            time.sleep(1)
-            twist = self._compute_twist(0, 0, 0)
-            self.twist_pub.publish(twist)
+            resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
 
-            scaf_geom_type       = GeomType(value=6)
-            scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0, size_1=0, size_2=0, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
-            resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
-            if not resp.success:
-                rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
+            # #move upward to pick object up
+            # twist = self._compute_twist(0, 0, 1)
+            # self.twist_pub.publish(twist)
+            
+            # time.sleep(1)
+            # twist = self._compute_twist(0, 0, 0)
+            # self.twist_pub.publish(twist)
+
+            # scaf_geom_type       = GeomType(value=6)
+            # scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0, size_1=0, size_2=0, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
+            # resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+            # if not resp.success:
+            #     rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
 
         return grasp_success
 
@@ -450,16 +462,16 @@ class TactileObjectPlacementEnv(gym.Env):
         self._sample_obj_params()        
 
         # sample object start pose
-        obj_pos = self._sample_object_pose()
+        obj_pos, obj_quat = self._sample_object_pose()
 
-        #compute and spawn scaffold
-        scaf_size_2 = obj_pos[-1] - self.obj_size_2
+        # #compute and spawn scaffold
+        # scaf_size_2 = obj_pos[-1] - self.obj_size_2
 
-        scaf_geom_type       = GeomType(value=6)
-        scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0.2, size_1=0.3, size_2=scaf_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
-        resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
-        if not resp.success:
-            rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
+        # scaf_geom_type       = GeomType(value=6)
+        # scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0.2, size_1=0.3, size_2=scaf_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
+        # resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+        # if not resp.success:
+        #     rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
 
         # set object properties
         obj_geom_type = GeomType(value=self.obj_geom_type_value)
@@ -469,8 +481,8 @@ class TactileObjectPlacementEnv(gym.Env):
             rospy.logerr("SetGeomProperties:failed to set object parameters")
 
         # set object pose with mass=0
-        body_state = BodyState(env_id=0, name="object", pose=nparray_to_posestamped(obj_pos, np.array([1, 0, 0, 0])), mass=self.obj_mass)
-        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=False, set_mass=True, reset_qpos=False)
+        body_state = BodyState(env_id=0, name="object", pose=nparray_to_posestamped(obj_pos, obj_quat), mass=self.obj_mass)
+        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
 
@@ -495,8 +507,14 @@ class TactileObjectPlacementEnv(gym.Env):
     def reset(self, seed=None):
 
         super().reset(seed=seed)
-        self._open_gripper()
         success = False
+
+
+        # #turn off gravity
+        # resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
+
+        # #turn on gravity
+        # resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
 
         while not success:
 
@@ -509,11 +527,10 @@ class TactileObjectPlacementEnv(gym.Env):
             self._open_gripper()
 
             success = self._initial_grasp()
-            time.sleep(0.1)
 
         observation = self._get_obs() 
     
-        info = {'X' : None}
+        info = {'info' : None}
         return observation, info 
     
 
