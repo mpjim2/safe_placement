@@ -89,12 +89,17 @@ class TactileObjectPlacementEnv(gym.Env):
         # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
-        self.action_space = Dict({
-            "move_down" : Discrete(2, start=-1),
-            "rotate_X" : Discrete(3, start=-1),
-            "rotate_Y" : Discrete(3, start=-1),
-            "open_gripper" : Discrete(2)
-        })
+
+        self.action_space = Discrete(19)
+
+        self.DISCRETE_ACTIONS = []
+
+        for x in [-1, 0, 1]:
+            for y in [-1, 0, 1]:
+                for z in [0, -1]:
+                    self.DISCRETE_ACTIONS.append([z,x,y,0])
+
+        self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
 
         self.observation_space = Dict({
             "observation" : Dict({
@@ -398,7 +403,10 @@ class TactileObjectPlacementEnv(gym.Env):
     def step(self, action):
         
         done = False
-        if action['open_gripper'] == 1:
+
+        action = self.DISCRETE_ACTIONS[action]
+        
+        if action[-1] == 1:
             #Stop movement of arm
             stop_ = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(stop_)
@@ -411,12 +419,12 @@ class TactileObjectPlacementEnv(gym.Env):
             reward = self._compute_reward()
         
         else:
-            
+
             reward = 0
 
-            twist = self._compute_twist(action['rotate_X'], 
-                                        action['rotate_Y'], 
-                                        action['move_down'])
+            twist = self._compute_twist(action[1], 
+                                        action[2], 
+                                        action[0])
 
             self.twist_pub.publish(twist)
             
@@ -440,21 +448,7 @@ class TactileObjectPlacementEnv(gym.Env):
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
             resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
-
-            # #move upward to pick object up
-            # twist = self._compute_twist(0, 0, 1)
-            # self.twist_pub.publish(twist)
-            
-            # time.sleep(1)
-            # twist = self._compute_twist(0, 0, 0)
-            # self.twist_pub.publish(twist)
-
-            # scaf_geom_type       = GeomType(value=6)
-            # scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0, size_1=0, size_2=0, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
-            # resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
-            # if not resp.success:
-            #     rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
-
+        
         return grasp_success
 
     def set_object_params(self):
@@ -463,15 +457,6 @@ class TactileObjectPlacementEnv(gym.Env):
 
         # sample object start pose
         obj_pos, obj_quat = self._sample_object_pose()
-
-        # #compute and spawn scaffold
-        # scaf_size_2 = obj_pos[-1] - self.obj_size_2
-
-        # scaf_geom_type       = GeomType(value=6)
-        # scaf_geom_properties = GeomProperties(env_id=0, name="scaffold_geom", type=scaf_geom_type, size_0=0.2, size_1=0.3, size_2=scaf_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001) 
-        # resp = self.set_geom_properties(properties=scaf_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
-        # if not resp.success:
-        #     rospy.logerr("SetGeomProperties:failed to set scaffold parameters")
 
         # set object properties
         obj_geom_type = GeomType(value=self.obj_geom_type_value)
@@ -508,13 +493,6 @@ class TactileObjectPlacementEnv(gym.Env):
 
         super().reset(seed=seed)
         success = False
-
-
-        # #turn off gravity
-        # resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
-
-        # #turn on gravity
-        # resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
 
         while not success:
 
