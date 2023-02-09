@@ -22,6 +22,7 @@ import tf.transformations
 import message_filters, actionlib
 import rospkg
 
+import math
 import time
 
 
@@ -90,17 +91,18 @@ class TactileObjectPlacementEnv(gym.Env):
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
 
-        self.action_space = Discrete(19)
+        
 
         self.DISCRETE_ACTIONS = []
 
         for x in [-1, 0, 1]:
-            for y in [-1, 0, 1]:
-                for z in [0, -1]:
-                    self.DISCRETE_ACTIONS.append([z,x,y,0])
+            
+            for z in [0, -1]:
+                self.DISCRETE_ACTIONS.append([z,x,0,0])
 
-        self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
+        # self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
 
+        self.action_space = Discrete(len(self.DISCRETE_ACTIONS))
         self.observation_space = Dict({
             "observation" : Dict({
                 "ee_pose" : Box( low=np.array([-np.inf, -np.inf, -np.inf, -np.pi, -np.pi, -np.pi]), 
@@ -182,7 +184,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
         self.range_obj_height = object_params.get("range_height", np.array([0.1/2, 0.1/2])) # [m]
         self.range_obj_l = object_params.get("range_l", np.array([0.04/2, 0.07/2])) # [m]; range width and length (requires object type "box")
-        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.15  /2])) # [m]; range width and length (requires object type "box")
+        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.15/2])) # [m]; range width and length (requires object type "box")
         self.range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
 
         self.range_obj_x_pos = object_params.get("range_x_pos", np.array([0.275,0.525])) #[m]
@@ -203,9 +205,11 @@ class TactileObjectPlacementEnv(gym.Env):
         if self.obj_type == "box":
             self.obj_geom_type_value = 6
             # sample object width/2, length/2 and height/2 
-            self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.range_obj_w[1]) # width/2
-            self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.range_obj_l[1]) # length/2
             self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=self.range_obj_height[1] ) # height/2
+
+            self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.obj_size_2*0.75) # width/2
+            self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.obj_size_2*0.75) # length/2
+            
             self.obj_height = self.obj_size_2
         else:
             # self.obj_type == "cylinder"
@@ -223,19 +227,51 @@ class TactileObjectPlacementEnv(gym.Env):
 
         position    = transformationEE[:3, -1]
 
-        y_angle = np.random.uniform(low=-np.pi, high=np.pi)
+        y_angle = np.random.uniform(low=-np.pi/2, high=np.pi/2)
+
         quat = tf.transformations.quaternion_from_euler(0,y_angle,0)
+
+        py_quat = pq.Quaternion(quat)
+
+        obj_axis = np.array(rotate_vec(v=[0,0,1], q=py_quat))
 
         #self.obj_size_0, self.obj_size_1, self.obj_size_2
 
-        z_shift = np.random.uniform(low=-0.035, high=0.03)
-        pos_z = position[2] - self.obj_height  #+ z_shift
+        # z_shift = np.random.uniform(low=-0.035, high=0.03)
+        # pos_z = position[2] - self.obj_height  #+ z_shift
 
         # x_shift = np.random.uniform(low=-self.obj_size_0/2, high=self.obj_size_0/2)
         # # position[0] += x_shift
         # # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
         # position[0] += x_shift  
-        position[2] = pos_z
+        # position[2] = pos_z
+        
+        #Mittelpunkt der Myrmex Sensoren
+        position[2] -= 0.025
+
+        #position of myrmex corners: 
+        # [-0.02, X, -0.02]
+        # [ 0.02, X, -0.02]
+        #Mindest veschiebung Differenz der Sensor Diagonalen und halber höhe des Objekts
+        #Maximal halbe Höhe des objekts
+        #Verschiebe objekt entlang seiner Längsachse 
+        
+        obj_axis_n = (obj_axis / np.linalg.norm(obj_axis)) * self.obj_height/2
+        # m_diag = np.array([0.02, 0, -0.02])
+
+        m_diag = math.sqrt((0.04**2) * 2)/2
+
+        diff = m_diag - np.linalg.norm(obj_axis_n) 
+        if diff >= 0:
+            min_shift = diff + 0.003
+        else:
+            min_shift = 0
+        # print(np.linalg.norm(m_diag))
+        # print(np.linalg.norm(obj_axis))
+
+        ax_shift = np.random.uniform(low=min_shift, high=0.5*self.obj_height)
+
+        position -= (obj_axis * ax_shift)
 
         return position, quat
 
@@ -274,7 +310,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
 
-        observation = {"ee_pose" : pose, 
+        observation = {
+                       "ee_pose" : pose, 
                        "joint_positions" : joint_positions,
                        "joint_torques" : joint_torques,
                        "joint_velocities" : joint_velocities,
@@ -322,7 +359,7 @@ class TactileObjectPlacementEnv(gym.Env):
         twist_msg.angular.x = xyz[0]
         twist_msg.angular.y = xyz[1]
         twist_msg.angular.z = xyz[2]
-
+        
         return twist_msg
 
     def _open_gripper(self, width=0.08):
@@ -377,27 +414,27 @@ class TactileObjectPlacementEnv(gym.Env):
     def _compute_reward(self):
         
         #object Y-Value in World Frame
-        obj_h = point_to_numpy(self.current_msg['object_pos'].point)[1]        
+        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)       
+        obj_h = obj_pos[-1]
 
         #object Y-Axis in World frame
         quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
         quat = pq.Quaternion(quat)
 
-        y_axis = rotate_vec(np.array([0, 1, 0]), quat)
+        z_axis = rotate_vec(np.array([0, 0, 1]), quat)
+
+        c1_vec = rotate_vec(np.array([ 1, 0, -1]), quat)        
+        c2_vec = rotate_vec(np.array([-1, 0, -1]), quat)
+
+        if abs(c1_vec[-1]) <= 0.00001 or abs(c2_vec[-1]) <= 0.00001:
+            reward = 0.5          
+        else:
+            reward = 0
 
         # dot product of world Y and object Y axis
-        uprightnes = np.dot(np.array([0, 1, 0]), y_axis)
+        uprightnes = np.dot(np.array([0, 0, 1]), z_axis)
 
-        # distance of object to floor
-        floor_closeness = self.obj_height/2 - obj_h
-        if uprightnes == 0:
-            return -1
-        else:
-            return uprightnes - floor_closeness
-        #Reward = 1 if object upright
-        #Reward = -1 if no contact between ground and object at release time
-        #Reward = 0.5 * difference from upright position at moment of release
-        #if object tips over
+        return reward + 0.5 * uprightnes    
         
 
     def step(self, action):
@@ -412,16 +449,16 @@ class TactileObjectPlacementEnv(gym.Env):
             self.twist_pub.publish(stop_)
             
             observation = self._get_obs()
-            
+            #Compute reward before Opening Gripper; Else ground contact is uninformative as object falls down
+            reward = self._compute_reward()
+
             self._open_gripper()
             done = True
-
-            reward = self._compute_reward()
         
         else:
 
             reward = 0
-
+            
             twist = self._compute_twist(action[1], 
                                         action[2], 
                                         action[0])
@@ -443,7 +480,7 @@ class TactileObjectPlacementEnv(gym.Env):
             self.set_object_params()
 
 
-        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=10.0, eps=0.005, speed=0.01)
+        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=20.0, eps=0.005, speed=0.01)
         
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
