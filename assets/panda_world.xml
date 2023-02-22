@@ -18,10 +18,10 @@
 		<!-- Contact properties for each geom: hydroelasticModulus, dissipation, resolutionHint, staticFriction, dynamicFriction.
 		A rigid object has hydroelasticModulus of 0 and dissipation of 1. 
 		A soft box with a resolution hint of 0 uses a resolution automatically computed by drake. -->
-		<numeric name="cs::object_geom" data="0 1.0 0.4 0.1 0.1"/>
+		<numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/>
 
-		<numeric name="cs::myrmex_foam_right" data="0.001 5.0 0 0.5 0.5"/>
-        <numeric name="cs::myrmex_foam_left"  data="0.001 5.0 0 0.5 0.5"/>
+		<numeric name="cs::myrmex_foam_right" data="0.001 7.0 0 1 1"/>
+        <numeric name="cs::myrmex_foam_left"  data="0.001 7.0 0 1 1"/>
 		<!---<numeric name="cs::myrmex_foam" data="5e4 5.0 0 0.3 0.3"/> -->
 	</custom>
 
@@ -31,7 +31,7 @@
         <light pos="0 0 1000" castshadow="false" />
         <geom name="ground_plane" type="plane" size="5 5 10" material="MatPlane" rgba="1 1 0 1"/>
         
-        <body name="object" pos="1 1 1">
+        <body name="object" pos="1 1 0.02">
 
 			<freejoint/>
 
@@ -39,10 +39,10 @@
             <site name="object_center" pos="0 0 0" size="0.001" rgba="1 0 0 0" type="sphere" />
 		</body>
         
-        <body name="graspscaffold" pos="0.3 0 0">
+        <!-- <body name="graspscaffold" pos="0.3 0 0">
 
             <geom size="0.2 0.5 0.3" type="box" condim="3" contype="1" name="scaffold_geom" mass="50" rgba="0 0 0 1"/>
-        </body>
+        </body> -->
     </worldbody>
 
     <sensor>

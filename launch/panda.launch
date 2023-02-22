@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <launch>
+  <arg name="pipeline" default="ompl" />
 
   <!-- Robot Customization -->
   <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
@@ -24,6 +25,9 @@
   <arg name="render_offscreen" default="false" doc="Should camera streams be rendered and published?" />
   <arg name="use_fingertips" default="false" doc="Should Shadowhandfingertips be mounted to the gripper fingers?" />
   <!-- <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" /> -->
+  <arg name="transmission" default="effort" />
+  <arg name="load_gripper" default="true" />
+
 
   <!-- Since robot position and orientation are defined by the xml file, these option currently do not change the robot position, but should match the position and orientation of the model file -->
   <arg name="x"           default="0"     doc="How far forward to place the base of the robot in [m]?" />
@@ -38,17 +42,12 @@
   <param name="robot_description"
          command="xacro $(find safe_placement)/assets/urdf/panda_gripper_myrmex.urdf.xacro
                   gazebo:=true
-                  hand:=$(arg use_gripper)
+                  hand:=$(arg load_gripper)
                   arm_id:=$(arg arm_id)
                   xyz:='$(arg x) $(arg y) $(arg z)'
                   rpy:='$(arg roll) $(arg pitch) $(arg yaw)'
                   $(arg xacro_args)">
   </param>
-
-
-  <param name="RotationX" type="int" value="$(arg rx)" />
-  <param name="RotationY" type="int" value="$(arg ry)" />
-  <param name="TranslationZ" type="int" value="$(arg tz)" />
 
   <rosparam file="$(find safe_placement)/config/franka_hw_sim.yaml" subst_value="true" />
   <rosparam file="$(find safe_placement)/config/sim_controllers.yaml" subst_value="true" />
