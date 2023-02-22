@@ -6,11 +6,7 @@
     <arg name="transmission" default="effort" />
     <arg name="robot" default="panda" doc="choose your robot. Possible values: [panda, fr3]"/>
     <arg name="arm_id" default="$(arg robot)" />
-    <arg name="rx" default="0" />
-    <arg name="ry" default="0" />
-    <arg name="tz" default="1" />
-
-
+  
 
     <include file="$(find safe_placement)/launch/panda.launch" pass_all_args="true">
         <arg name="modelfile" value="$(find safe_placement)/assets/panda_world.xml" />
@@ -20,9 +16,6 @@
         <arg name="unpause" default="true" />
         <arg name="rviz"     value="false" />
     </include>
-
-
-    
 
     <!-- <include file="$(find safe_placement)/launch/cartesian_velocity_example.launch" pass_all_args="true"></include> -->
     <!-- <include file="$(find safe_placement)/launch/move_to_start.launch" pass_all_args="true" ></include> -->
