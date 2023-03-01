@@ -33,14 +33,14 @@ Transition = namedtuple('Transition',
                          'next_state',
                          'reward'))
 
-def obs_to_input(obs, cur_stack):
+def obs_to_input(obs, cur_stack, device):
 
-    cur_stack.state_ml.append(torch.from_numpy(obs["myrmex_l"].reshape((1, 16,16))).unsqueeze(0)) #.type(torch.DoubleTensor)
-    cur_stack.state_mr.append(torch.from_numpy(obs["myrmex_r"].reshape((1, 16,16))).unsqueeze(0)) #.type(torch.DoubleTensor)
-    cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).unsqueeze(0))                      #.type(torch.DoubleTensor)
-    cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).unsqueeze(0))              #.type(torch.DoubleTensor)
-    cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).unsqueeze(0))                #.type(torch.DoubleTensor)
-    cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).unsqueeze(0))             #.type(torch.DoubleTensor)
+    cur_stack.state_ml.append(torch.from_numpy(obs["myrmex_l"].reshape((1, 16,16))).unsqueeze(0).to(device)) #.type(torch.DoubleTensor)
+    cur_stack.state_mr.append(torch.from_numpy(obs["myrmex_r"].reshape((1, 16,16))).unsqueeze(0).to(device)) #.type(torch.DoubleTensor)
+    cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).unsqueeze(0).to(device))                      #.type(torch.DoubleTensor)
+    cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).unsqueeze(0).to(device))              #.type(torch.DoubleTensor)
+    cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).unsqueeze(0).to(device))                #.type(torch.DoubleTensor)
+    cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).unsqueeze(0).to(device))             #.type(torch.DoubleTensor)
     
     return cur_stack
 
@@ -81,8 +81,8 @@ class DQN_Algo():
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         #Policy and target network initilisation
-        self.policy_net = DQN.MAT_based_net(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double()
-        self.target_net = DQN.MAT_based_net(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double()
+        self.policy_net = DQN.MAT_based_net(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
+        self.target_net = DQN.MAT_based_net(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
 
         self.replay_buffer = ReplayMemory(mem_size)
 
@@ -103,12 +103,12 @@ class DQN_Algo():
         self.stepcount = 0
 
         self.n_timesteps = n_timesteps
-        self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 6), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 7), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 7), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 7), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+        self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_ep=deque([torch.zeros((1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_jp=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_jt=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
 
     
@@ -130,14 +130,14 @@ class DQN_Algo():
             done = False
 
             #ReInitialize cur_state_stack
-            self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_ep=deque([torch.zeros((1, 6), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jp=deque([torch.zeros((1, 7), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jt=deque([torch.zeros((1, 7), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jv=deque([torch.zeros((1, 7), dtype=torch.double) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+            self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                         state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                         state_ep=deque([torch.zeros((1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                         state_jp=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                         state_jt=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                         state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
-            self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack)
+            self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
             state = stack_to_state(self.cur_state_stack)
 
             for step in count():
@@ -149,7 +149,7 @@ class DQN_Algo():
 
                 reward = torch.tensor([reward])
                 if not done:
-                    self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack)
+                    self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
                     next_state = stack_to_state(self.cur_state_stack)
                 else:
                     next_state = None
