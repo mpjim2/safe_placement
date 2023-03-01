@@ -91,7 +91,7 @@ class TactileObjectPlacementEnv(gym.Env):
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
 
-        
+        self.max_episode_steps = 1000
 
         self.DISCRETE_ACTIONS = []
 
@@ -165,8 +165,7 @@ class TactileObjectPlacementEnv(gym.Env):
         
 
         resp = self.pause_sim(paused=False)
-        print('PAUSE RESPONSE:::::')
-        print(resp)
+     
         self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
 
         #client for MoveAction
@@ -412,27 +411,23 @@ class TactileObjectPlacementEnv(gym.Env):
 
         z_axis = rotate_vec(np.array([0, 0, 1]), quat)
 
-        c1_vec = rotate_vec(np.array([ 1, 0, -1]), quat)        
-        c2_vec = rotate_vec(np.array([-1, 0, -1]), quat)
-
-        if abs(c1_vec[-1]) <= 0.00001 or abs(c2_vec[-1]) <= 0.00001:
-            reward = 0.5          
-        else:
-            reward = -1
+        height_reward = -abs(self.obj_height/2 - obj_h)
 
         # dot product of world Y and object Y axis
         uprightnes = np.dot(np.array([0, 0, 1]), z_axis)
 
-        return reward + 0.5 * uprightnes    
+        return height_reward + uprightnes    
         
 
     def step(self, action):
+
+        self.max_episode_steps -= 1
 
         done = False
 
         action = self.DISCRETE_ACTIONS[action]
         
-        if action[-1] == 1:
+        if action[-1] == 1 or self.max_episode_steps==0:
             #Stop movement of arm
             stop_ = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(stop_)
@@ -441,11 +436,11 @@ class TactileObjectPlacementEnv(gym.Env):
             #Compute reward before Opening Gripper; Else ground contact is uninformative as object falls down
             reward = self._compute_reward()
 
-            self._open_gripper()
-            
-            self._compute_twist(0,0,1)
-            
-            time.sleep(0.5)
+            if action[-1] == 1:
+                self._open_gripper()
+                self._compute_twist(0,0,1)
+                
+                time.sleep(0.5)
             
             done = True
         
@@ -527,6 +522,7 @@ class TactileObjectPlacementEnv(gym.Env):
         super().reset(seed=seed)
         success = False
 
+        self.max_episode_steps = 1000
         while not success:
 
             self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
