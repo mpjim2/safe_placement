@@ -128,16 +128,21 @@ class DQN_Algo():
         self.ep_lengths_ = {'training' : [],
                             'testing'  : []}
 
+        self.done_causes = {'training' : [],
+                           'testing'  : []}
     
     def save_checkpoint(self):
          
         torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Model')
        
         with open(self.FILEPATH + '/Rewards.pickle', 'wb') as file:
-            pickle.dump(self.rewards_)
+            pickle.dump(self.rewards_, file)
         
         with open(self.FILEPATH + '/Ep_length.pickle', 'wb') as file:
-            pickle.dump(self.ep_lengths_)
+            pickle.dump(self.ep_lengths_, file)
+        
+        with open(self.FILEPATH + '/done_causes.pickle', 'wb') as file:
+            pickle.dump(self.done_causes, file)
 
         return 0
     
@@ -153,7 +158,7 @@ class DQN_Algo():
 
     def test(self):
         
-        obs, info = self.env.reset()
+        obs, _ = self.env.reset()
         done = False
 
         #ReInitialize cur_state_stack
@@ -172,7 +177,7 @@ class DQN_Algo():
             
             action = self.select_action(state)
             
-            obs, reward, done, _ , _ = self.env.step(action)
+            obs, reward, done, _ , info = self.env.step(action)
 
             reward = torch.tensor([reward])
             if not done:
@@ -184,11 +189,12 @@ class DQN_Algo():
             state = next_state
 
             if done:
+                self.done_causes['testing'] = info['cause']
                 break
 
         self.rewards_['testing'].append((reward, self.stepcount))
         self.ep_lengths_['testing'].append(step)
-
+        
 
     def train(self):
         
@@ -212,7 +218,7 @@ class DQN_Algo():
                 #experience sample: state, action, reward,  state+1
                 action = self.select_action(state)
                 
-                obs, reward, done, _ , _ = self.env.step(action)
+                obs, reward, done, _ , info = self.env.step(action)
 
                 reward = torch.tensor([reward])
                 if not done:
@@ -229,6 +235,8 @@ class DQN_Algo():
                 self.stepcount += 1
 
                 if done:
+                    print(info)
+                    self.done_causes['training'] = info['cause']
                     break
             
             print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', reward)
@@ -298,4 +306,5 @@ if __name__=='__main__':
                     tau=0.9,
                     n_timesteps=20)
 
-    algo.train()
+    algo.train()    
+    algo.test()

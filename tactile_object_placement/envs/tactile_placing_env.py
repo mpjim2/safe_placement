@@ -437,7 +437,13 @@ class TactileObjectPlacementEnv(gym.Env):
         done = False
 
         action = self.DISCRETE_ACTIONS[action]
-        
+        #[0, 1, 2, 3]
+        #0 not terminated
+        #1 opened gripper
+        #2 ran out of time
+        #3 lost object
+
+        info = {'cause' : 0}
         if action[-1] == 1 or self.max_episode_steps==0:
             #Stop movement of arm
             stop_ = self._compute_twist(0, 0, 0)
@@ -451,8 +457,10 @@ class TactileObjectPlacementEnv(gym.Env):
                 self._open_gripper()
                 self._compute_twist(0,0,1)
                 
+                info['cause'] = 1
                 time.sleep(0.5)
-            
+            else:
+                info['cause'] = 2
             done = True
         
         else:
@@ -470,8 +478,9 @@ class TactileObjectPlacementEnv(gym.Env):
             if self._check_object_grip() == False:
                 done = True
                 reward = -0.5
+                info['cause'] = 3
         
-        return observation, reward, done, False, {'info' : None}
+        return observation, reward, done, False, info
 
     def _initial_grasp(self):
         
