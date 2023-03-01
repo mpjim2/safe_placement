@@ -78,8 +78,6 @@ class DQN_Algo():
 
         self.env = TactileObjectPlacementEnv()
         
-        print('########################')
-        print(self.env.action_space.n)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         #Policy and target network initilisation
@@ -148,7 +146,7 @@ class DQN_Algo():
                 action = self.select_action(state)
                 
                 obs, reward, done, _ , _ = self.env.step(action)
-                
+
                 reward = torch.tensor([reward])
                 if not done:
                     self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack)
@@ -176,8 +174,8 @@ class DQN_Algo():
 
         state_batch = State(*zip(*batch.state))
 
-        action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
+        action_batch = torch.cat(batch.action).to(self.device)
+        reward_batch = torch.cat(batch.reward).to(self.device)
 
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                     batch.next_state)), device=self.device, dtype=torch.bool)
@@ -220,7 +218,7 @@ if __name__=='__main__':
                     discount_factor=0.9, 
                     mem_size=10000, 
                     batch_size=8, 
-                    n_epochs=15, 
+                    n_epochs=5, 
                     tau=0.9,
                     n_timesteps=20)
 

@@ -96,11 +96,10 @@ class TactileObjectPlacementEnv(gym.Env):
         self.DISCRETE_ACTIONS = []
 
         for x in [-1, 0, 1]:
-            
             for z in [0, -1]:
-                self.DISCRETE_ACTIONS.append([z,x,0,0])
+                self.DISCRETE_ACTIONS.append([z,0,x,0])
 
-        # self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
+        self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
 
         self.action_space = Discrete(len(self.DISCRETE_ACTIONS))
         self.observation_space = Dict({
@@ -162,9 +161,12 @@ class TactileObjectPlacementEnv(gym.Env):
         self.pause_sim           = rospy.ServiceProxy("/mujoco_server/set_pause", SetPause)
         self.set_gravity         = rospy.ServiceProxy("mujoco_server/set_gravity", SetGravity)
         self.get_gravity         = rospy.ServiceProxy("mujoco_server/get_gravity", GetGravity)
-
         self.set_load            = rospy.ServiceProxy("/franka_control/set_load", SetLoad)
         
+
+        resp = self.pause_sim(paused=False)
+        print('PAUSE RESPONSE:::::')
+        print(resp)
         self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
 
         #client for MoveAction
@@ -192,6 +194,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.003
 
+        self.max_timesteps = 1000
+        self.cur_timestep  = 0
 
     def _sample_obj_params(self):
         # sample new object/target type
@@ -234,17 +238,6 @@ class TactileObjectPlacementEnv(gym.Env):
         py_quat = pq.Quaternion(quat)
 
         obj_axis = np.array(rotate_vec(v=[0,0,1], q=py_quat))
-
-        #self.obj_size_0, self.obj_size_1, self.obj_size_2
-
-        # z_shift = np.random.uniform(low=-0.035, high=0.03)
-        # pos_z = position[2] - self.obj_height  #+ z_shift
-
-        # x_shift = np.random.uniform(low=-self.obj_size_0/2, high=self.obj_size_0/2)
-        # # position[0] += x_shift
-        # # x_shift = np.random.uniform(low=-self.obj_size_0/3, high=self.obj_size_0/3)
-        # position[0] += x_shift  
-        # position[2] = pos_z
         
         #Mittelpunkt der Myrmex Sensoren
         position[2] -= 0.025
@@ -252,13 +245,11 @@ class TactileObjectPlacementEnv(gym.Env):
         #position of myrmex corners: 
         # [-0.02, X, -0.02]
         # [ 0.02, X, -0.02]
+
         #Mindest veschiebung Differenz der Sensor Diagonalen und halber höhe des Objekts
         #Maximal halbe Höhe des objekts
         #Verschiebe objekt entlang seiner Längsachse 
-        
         obj_axis_n = (obj_axis / np.linalg.norm(obj_axis)) * self.obj_height/2
-        # m_diag = np.array([0.02, 0, -0.02])
-
         m_diag = math.sqrt((0.04**2) * 2)/2
 
         diff = m_diag - np.linalg.norm(obj_axis_n) 
@@ -266,8 +257,6 @@ class TactileObjectPlacementEnv(gym.Env):
             min_shift = diff + 0.003
         else:
             min_shift = 0
-        # print(np.linalg.norm(m_diag))
-        # print(np.linalg.norm(obj_axis))
 
         ax_shift = np.random.uniform(low=min_shift, high=0.5*self.obj_height)
 
@@ -429,7 +418,7 @@ class TactileObjectPlacementEnv(gym.Env):
         if abs(c1_vec[-1]) <= 0.00001 or abs(c2_vec[-1]) <= 0.00001:
             reward = 0.5          
         else:
-            reward = 0
+            reward = -1
 
         # dot product of world Y and object Y axis
         uprightnes = np.dot(np.array([0, 0, 1]), z_axis)
@@ -438,7 +427,7 @@ class TactileObjectPlacementEnv(gym.Env):
         
 
     def step(self, action):
-        
+
         done = False
 
         action = self.DISCRETE_ACTIONS[action]
@@ -453,12 +442,17 @@ class TactileObjectPlacementEnv(gym.Env):
             reward = self._compute_reward()
 
             self._open_gripper()
+            
+            self._compute_twist(0,0,1)
+            
+            time.sleep(0.5)
+            
             done = True
         
         else:
 
             reward = 0
-            
+
             twist = self._compute_twist(action[1], 
                                         action[2], 
                                         action[0])
@@ -466,6 +460,8 @@ class TactileObjectPlacementEnv(gym.Env):
             self.twist_pub.publish(twist)
             
             observation = self._get_obs()
+        
+        self.cur_timestep += 1
         
         return observation, reward, done, False, {'info' : None}
 
@@ -552,4 +548,3 @@ class TactileObjectPlacementEnv(gym.Env):
     def close(self):
         if "self.launch" in locals():
             self.launch.stop()
-
