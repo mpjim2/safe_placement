@@ -18,6 +18,9 @@ import random
 import math
 from itertools import count
 
+import os
+import pickle
+from datetime import datetime
 
 State = namedtuple('State', 
                     ('state_ml',
@@ -76,8 +79,8 @@ class DQN_Algo():
 
     def __init__(self, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps):
 
-        self.env = TactileObjectPlacementEnv()
-        
+        self.env = gym.make('TactileObjectPlacementEnv-v0')
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         #Policy and target network initilisation
@@ -111,6 +114,32 @@ class DQN_Algo():
                                      state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
 
+
+        time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
+        self.FILEPATH = '/home/marco/Masterarbeit/Training/' + time_string + '/'
+
+        if not os.path.exists(self.FILEPATH):
+            os.makedirs(self.FILEPATH)
+
+        #contains rewards & length of episode for every episode
+        self.rewards_ = {'training' : [], 
+                         'testing'  : [] }
+
+        self.ep_lengths_ = {'training' : [],
+                            'testing'  : []}
+
+    
+    def save_checkpoint(self):
+         
+        torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Model')
+       
+        with open(self.FILEPATH + '/Rewards.pickle', 'wb') as file:
+            pickle.dump(self.rewards_)
+        
+        with open(self.FILEPATH + '/Ep_length.pickle', 'wb') as file:
+            pickle.dump(self.ep_lengths_)
+
+        return 0
     
     def select_action(self, state):
         
@@ -121,6 +150,45 @@ class DQN_Algo():
             action = torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
         
         return action
+
+    def test(self):
+        
+        obs, info = self.env.reset()
+        done = False
+
+        #ReInitialize cur_state_stack
+        self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                        state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                        state_ep=deque([torch.zeros((1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                        state_jp=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                        state_jt=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                        state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+
+        self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
+        state = stack_to_state(self.cur_state_stack)
+
+        for step in count():
+            #experience sample: state, action, reward,  state+1
+            
+            action = self.select_action(state)
+            
+            obs, reward, done, _ , _ = self.env.step(action)
+
+            reward = torch.tensor([reward])
+            if not done:
+                self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
+                next_state = stack_to_state(self.cur_state_stack)
+            else:
+                next_state = None
+
+            state = next_state
+
+            if done:
+                break
+
+        self.rewards_['testing'].append((reward, self.stepcount))
+        self.ep_lengths_['testing'].append(step)
+
 
     def train(self):
         
@@ -142,7 +210,6 @@ class DQN_Algo():
 
             for step in count():
                 #experience sample: state, action, reward,  state+1
-                
                 action = self.select_action(state)
                 
                 obs, reward, done, _ , _ = self.env.step(action)
@@ -163,7 +230,16 @@ class DQN_Algo():
 
                 if done:
                     break
+            
             print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', reward)
+            
+            self.rewards_['training'].append((reward, self.stepcount))
+            self.ep_lengths_['training'].append(step)
+            
+            if episode % 5 == 0:
+                self.test()
+                self.save_checkpoint()
+
         self.env.close()
     
     def optimize(self):
