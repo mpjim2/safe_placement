@@ -194,7 +194,6 @@ class TactileObjectPlacementEnv(gym.Env):
         self.sensor_thickness = 0.003
 
         self.max_timesteps = 1000
-        self.cur_timestep  = 0
 
     def _sample_obj_params(self):
         # sample new object/target type
@@ -350,6 +349,18 @@ class TactileObjectPlacementEnv(gym.Env):
         
         return twist_msg
 
+    def _check_object_grip(self):
+        
+        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+
+        transformationEE = self.current_msg['franka_state'].O_T_EE
+        transformationEE = np.array(transformationEE).reshape((4,4), order='F')
+        ee_pos           = transformationEE[:3, -1]
+
+        check = np.linalg.norm(ee_pos - obj_pos) <= self.obj_height/2 + 0.02 
+
+        return check
+
     def _open_gripper(self, width=0.08):
         goal = MoveGoal(width=width, speed=0.05)
 
@@ -455,8 +466,10 @@ class TactileObjectPlacementEnv(gym.Env):
             self.twist_pub.publish(twist)
             
             observation = self._get_obs()
-        
-        self.cur_timestep += 1
+
+            if self._check_object_grip() == False:
+                done = True
+                reward = -0.5
         
         return observation, reward, done, False, {'info' : None}
 
