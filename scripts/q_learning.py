@@ -240,7 +240,7 @@ class DQN_Algo():
                     self.done_causes['training'] = info['cause']
                     break
             
-            print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ' (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
+            print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ', (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
             
             self.rewards_['training'].append((float(reward), self.stepcount))
             self.ep_lengths_['training'].append(step)
@@ -301,7 +301,7 @@ if __name__=='__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--batchsize', required=False, help='int', default='16')
-    parser.add_argument('--nepochs', required=False, help='int', default='7000')
+    parser.add_argument('--nepochs', required=False, help='int', default='5')
     parser.add_argument('--lr', required=False, help='float', default="1e-4")
     parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
     opt = parser.parse_args()
