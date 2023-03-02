@@ -160,7 +160,7 @@ class TactileObjectPlacementEnv(gym.Env):
             uuid = roslaunch.rlutil.get_or_generate_uuid(options_runid=None, options_wait_for_master=False)
             roslaunch.configure_logging(uuid)
             pkg_path = rospkg.RosPack().get_path("safe_placement")
-            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch","test.launch")], is_core=True)
+            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch","panda.launch")], is_core=True)
             self.launch.start()
 
         rospy.init_node("SafePlacementEnvNode")
