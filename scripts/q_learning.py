@@ -193,7 +193,7 @@ class DQN_Algo():
                 self.done_causes['testing'] = info['cause']
                 break
 
-        self.rewards_['testing'].append((reward, self.stepcount))
+        self.rewards_['testing'].append((float(reward), self.stepcount))
         self.ep_lengths_['testing'].append(step)
         
 
@@ -240,9 +240,9 @@ class DQN_Algo():
                     self.done_causes['training'] = info['cause']
                     break
             
-            print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', reward)
+            print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ' (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
             
-            self.rewards_['training'].append((reward, self.stepcount))
+            self.rewards_['training'].append((float(reward), self.stepcount))
             self.ep_lengths_['training'].append(step)
             
             if episode % 5 == 0:
