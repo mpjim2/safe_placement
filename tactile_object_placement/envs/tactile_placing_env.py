@@ -55,6 +55,32 @@ def quaternion_to_numpy(quaternion):
 def point_to_numpy(point):
     return np.array([point.x, point.y, point.z])
 
+def compute_corner_coords(center, w, h, l, quat):
+
+    # Calculate half-lengths
+    half_width = w / 2
+    half_height = h / 2
+    half_length = l / 2
+
+    # Convert quaternion to rotation matrix
+    rot_matrix = R.from_quat(quat).as_matrix()
+
+    # Define local coordinates of corners
+    corners_local = np.array([[-half_width, -half_length, -half_height],
+                              [-half_width,  half_length, -half_height],
+                              [-half_width, -half_length,  half_height],
+                              [-half_width,  half_length,  half_height],
+                              [ half_width, -half_length, -half_height],
+                              [ half_width,  half_length, -half_height],
+                              [ half_width, -half_length,  half_height],
+                              [ half_width,  half_length,  half_height]])
+
+    # Rotate and translate corners to global coordinates
+    corners_global = corners_local @ rot_matrix.T + np.array([center[0], center[1], center[2]])
+
+    return corners_global
+
+
 class TactileObjectPlacementEnv(gym.Env):
     metadata = {}
 
@@ -416,18 +442,25 @@ class TactileObjectPlacementEnv(gym.Env):
         obj_pos = point_to_numpy(self.current_msg['object_pos'].point)       
         obj_h = obj_pos[-1]
 
-        #object Y-Axis in World frame
+        #object Y-Axis in World frame        
         quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
-        quat = pq.Quaternion(quat)
 
-        z_axis = rotate_vec(np.array([0, 0, 1]), quat)
+        corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
 
-        height_reward = -abs(self.obj_height/2 - obj_h)
+        if np.min(corners[:, -1]) <= 0.001:
+            
+            quat = pq.Quaternion(quat)
+            z_axis = rotate_vec(np.array([0, 0, 1]), quat)
+                    
+            height_reward = -abs(self.obj_height/2 - obj_h)
 
-        # dot product of world Y and object Y axis
-        uprightnes = np.dot(np.array([0, 0, 1]), z_axis)
+            # dot product of world Y and object Y axis
+            reward = np.dot(np.array([0, 0, 1]), z_axis)
 
-        return height_reward + uprightnes    
+        else:
+            reward = -1 
+        
+        return reward    
         
 
     def step(self, action):
