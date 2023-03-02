@@ -4,13 +4,14 @@
 
   <!-- Robot Customization -->
   <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
-  <arg name="unpause"     default="false"  doc="Should the simulation be unpaused on start?" />
-  <arg name="rviz"        default="true"  doc="Should rviz be spawned?" />
+  <arg name="unpause"     default="true"  doc="Should the simulation be unpaused on start?" />
+  <arg name="rviz"        default="false"  doc="Should rviz be spawned?" />
   <arg name="arm_id"      default="panda" doc="Name of the panda robot to spawn" />
   <arg name="use_gripper" default="true"  doc="Should a franka hand be mounted on the flange?" />
-  <arg name="controller"  default="cartesian_twist_controller"     doc="Which example controller should be started? (One of {cartesian_impedance,model,force,joint_position,joint_velocity}_example_controller)" />
-  <arg name="modelfile"   default="$(find safe_placement)/assets/panda_world.xml" doc="MuJoCo xml file to load. Should define robot model and world." />
-  <arg name="headless"    default="true" />
+  <arg name="controller"  default="cartesian_impedance_controller"     doc="Which example controller should be started? (One of {cartesian_impedance,model,force,joint_position,joint_velocity}_example_controller)" />
+  <arg name="modelfile" value="$(find safe_placement)/assets/panda_world.xml" />
+
+  <arg name="headless"    default="false" />
   <arg name="num_sim_steps" default="-1" />
   <arg name="xacro_args" default="" doc="Additional arguments to pass to panda.urdf.xacro" />
   <arg name="interactive_marker" default="$(eval arg('controller') == 'cartesian_impedance_example_controller')" doc="Should the interactive marker node be started?" />
