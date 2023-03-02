@@ -22,6 +22,8 @@ import os
 import pickle
 from datetime import datetime
 
+import argparse
+
 State = namedtuple('State', 
                     ('state_ml',
                      'state_mr', 
@@ -77,7 +79,7 @@ class ReplayMemory(object):
 
 class DQN_Algo():
 
-    def __init__(self, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps):
+    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps):
 
         self.env = gym.make('TactileObjectPlacementEnv-v0')
 
@@ -115,9 +117,8 @@ class DQN_Algo():
 
 
 
-        time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
-        self.FILEPATH = '/home/marco/Masterarbeit/Training/' + time_string + '/'
 
+        self.FILEPATH = filepath 
         if not os.path.exists(self.FILEPATH):
             os.makedirs(self.FILEPATH)
 
@@ -248,8 +249,9 @@ class DQN_Algo():
                 self.test()
                 self.save_checkpoint()
 
+        self.save_checkpoint()
         self.env.close()
-    
+
     def optimize(self):
 
         transitions = self.replay_buffer.sample(self.BATCH_SIZE)
@@ -297,14 +299,33 @@ class DQN_Algo():
     
 if __name__=='__main__':
 
-    algo = DQN_Algo(lr=1e-4, 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batchsize', required=False, help='int', default='16')
+    parser.add_argument('--nepochs', required=False, help='int', default='7000')
+    parser.add_argument('--lr', required=False, help='float', default="1e-4")
+    parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
+    opt = parser.parse_args()
+
+
+    batchsize = int(opt.batchsize)
+    nepochs = int(opt.nepochs)
+    lr = float(opt.lr)
+
+    time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
+
+    if opt.savedir is None:
+        filepath = '/home/marco/Masterarbeit/Training/' + time_string + '/'
+    else:
+        filepath = opt.savedir + time_string + '/'
+
+    algo = DQN_Algo(filepath=filepath,
+                    lr=lr, 
                     expl_slope=10000, 
                     discount_factor=0.9, 
-                    mem_size=10000, 
-                    batch_size=8, 
-                    n_epochs=5, 
+                    mem_size=5000, 
+                    batch_size=batchsize, 
+                    n_epochs=nepochs, 
                     tau=0.9,
                     n_timesteps=20)
 
     algo.train()    
-    algo.test()
