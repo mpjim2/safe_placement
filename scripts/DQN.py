@@ -126,3 +126,164 @@ class MAT_based_net(nn.Module):
         q_values = self.output_net(combined_embedding)
         
         return q_values
+
+
+# class ResidualBlock(nn.Module):
+    
+#     def __init__(self, in_channels, out_channels, spatial_size, temporal_size) -> None:
+#         super().__init__()
+#         self.seq = nn.Sequential(
+#             Conv2Plus1D(in_channels, out_channels, spatial_size, temporal_size)
+
+
+#         )
+        
+#     def forward(x):
+
+#         return self.seq(x)
+
+
+class Conv2Plus1D(nn.Module):
+    def __init__(self, in_channels, out_channels, spatial_size, temporal_size, padding=0):
+        """
+          A sequence of convolutional layers that first apply the convolution operation over the
+          spatial dimensions, and then the temporal dimension. 
+        """
+        super().__init__()
+        self.seq = nn.Sequential(
+            # Spatial decomposition
+            nn.Conv3d(in_channels=in_channels, out_channels=out_channels,
+                      kernel_size=(1, spatial_size, spatial_size),
+                      padding=padding),
+            # Temporal decomposition
+            nn.Conv3d(in_channels=out_channels, out_channels=out_channels, 
+                      kernel_size=(temporal_size, 1, 1),
+                      padding=padding)
+        )
+        
+        #Size EE Pose: (batchsize, 1, 6, n_timesteps)
+
+    def forward(self, x):
+        return self.seq(x)
+
+class placenet_v2(nn.Module):
+
+    def __init__(self, n_actions, n_timesteps) -> None:
+        super().__init__()
+
+        self.tactile_ftrs = nn.Sequential(
+            Conv2Plus1D(in_channels=2, 
+                        out_channels=16,
+                        spatial_size=7,
+                        temporal_size=5),
+            nn.ReLU(),
+            Conv2Plus1D(in_channels=16,
+                        out_channels=32,
+                        spatial_size=5,
+                        temporal_size=3),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(4608, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+            )
+
+        self.pose_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(36,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+
+        self.jp_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+        
+        self.jv_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+        
+        self.jt_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+
+        self.output_net = torch.nn.Sequential(
+            torch.nn.Linear(128*5, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions),
+            torch.nn.ReLU()
+        )
+
+    def forward(self, myrmex_data, 
+                      pose, 
+                      j_pos, 
+                      j_tau, 
+                      j_vel):
+        
+        combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+                                        self.pose_embedding(pose),
+                                        self.jp_embedding(j_pos),
+                                        self.jt_embedding(j_tau),
+                                        self.jv_embedding(j_vel)], dim=1)
+
+        q_values = self.output_net(combined_embedding)
+        
+        return q_values
+    
+if __name__=='__main__':
+    #batchsize x channels x time x width x height 
+    # x = torch.rand((1,2,10,16,16))  
+    
+    # tactile_ftrs = nn.Sequential(
+    #         Conv2Plus1D(in_channels=2, 
+    #                     out_channels=16,
+    #                     spatial_size=7,
+    #                     temporal_size=5),
+    #         nn.ReLU(),
+    #         Conv2Plus1D(in_channels=16,
+    #                     out_channels=32,
+    #                     spatial_size=5,
+    #                     temporal_size=3),
+    #         nn.ReLU(),
+    #         nn.Flatten(),
+    #         nn.Linear(4608, 128),
+    #         nn.ReLU(),
+    #         nn.Linear(128, 128),
+    #         nn.ReLU()
+    #         )
+    # y = tactile_ftrs(x)
+
+    # print(y.size())
+
+
+    x = torch.rand((1, 1, 10, 7))
+
+    layer = nn.Conv2d(1, 1, (5, 1), padding=0)
+
+    y = layer(x)
+
+    print(y.size())
