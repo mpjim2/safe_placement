@@ -1,0 +1,63 @@
+<mujoco model="panda">
+    <option collision="all" timestep="0.001" gravity="0 0 -9.81" cone="elliptic" />
+    <compiler angle="radian" />
+
+    <visual>
+        <headlight ambient="0.4 0.4 0.4" diffuse="0.4 0.4 0.4" specular="0.0 0.0 0.0" active="1" />
+    </visual>
+
+    <asset>
+        <texture builtin="checker" height="512" name="texplane" rgb1=".2 .3 .4" rgb2=".1 .15 .2" type="2d" width="512" />
+        <material name="MatPlane" reflectance="0.05" shininess="0.01" specular="0.01" texrepeat="1 1" texture="texplane" texuniform="true" />
+    </asset>
+
+    <custom>
+		<!-- All custom parameters related to contact surfaces have the prefix cs:: -->
+		<text name="cs::HydroelasticContactRepresentation" data="kTriangle"/>
+        <numeric name="cs::VisualizeSurfaces" data="1"/>
+		<!-- Contact properties for each geom: hydroelasticModulus, dissipation, resolutionHint, staticFriction, dynamicFriction.
+		A rigid object has hydroelasticModulus of 0 and dissipation of 1. 
+		A soft box with a resolution hint of 0 uses a resolution automatically computed by drake. -->
+		<numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/>
+
+		<numeric name="cs::myrmex_foam_right" data="0.001 7.0 0 1 1"/>
+        <numeric name="cs::myrmex_foam_left"  data="0.001 7.0 0 1 1"/>
+		<!---<numeric name="cs::myrmex_foam" data="5e4 5.0 0 0.3 0.3"/> -->
+	</custom>
+
+    <include file="panda.xml" />
+
+    <worldbody>
+        <light pos="0 0 1000" castshadow="false" />
+        <geom name="ground_plane" type="plane" size="5 5 10" material="MatPlane" rgba="1 1 0 1"/>
+        
+        <body name="object" pos="1 1 0.02">
+
+			<freejoint/>
+
+            <geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" rgba="1 0 0 1" friction="1 0.005 0.0001"/>
+            <site name="object_center" pos="0 0 0" size="0.001" rgba="1 0 0 0" type="sphere" />
+		</body>
+        
+        <body name="panda_rightfinger_myrmex_backplate" pos="0 0.00292 0.07" euler="-1.57079632679 0 0">
+            <freejoint/>
+            <inertial pos="2 2 0" mass="0.005" diaginertia="2e-06 2e-06 1e-06"/>
+            <geom name="myrmex_backplate_right" type="box" pos="0 0 0" size="0.04 0.04 0.002" rgba="0 0 1 1"/>
+            
+            <body name="panda_rightfinger_myrmex_foam_body" pos="0 0 -0.0025" euler="0 0 0">
+                <inertial pos="0 0 0" mass="0.005" diaginertia="2e-06 2e-06 1e-06"/>
+                <geom name="myrmex_foam_right" type="box" pos="0 0 0" size="0.04 0.04 0.003" rgba="1 0 0 0.5"/>
+            </body>
+        </body>
+        <!-- <body name="graspscaffold" pos="0.3 0 0">
+
+            <geom size="0.2 0.5 0.3" type="box" condim="3" contype="1" name="scaffold_geom" mass="50" rgba="0 0 0 1"/>
+        </body> -->
+    </worldbody>
+
+    <sensor>
+        <framequat name="object_quat" objtype="site" objname="object_center" />
+        <framepos name="object_pos" objtype="site" objname="object_center"/>
+    </sensor>
+
+</mujoco>

@@ -508,6 +508,7 @@ class TactileObjectPlacementEnv(gym.Env):
             
             observation = self._get_obs()
 
+            print(observation['observation']['time_diff'])
             if self._check_object_grip() == False:
                 done = True
                 reward = -0.5
@@ -576,7 +577,13 @@ class TactileObjectPlacementEnv(gym.Env):
 
         super().reset(seed=seed)
         success = False
-
+        
+        n = time.time()
+        while True:
+            if None not in self.current_msg.values():
+                print("All Msgs arrived after: " , time.time() - n)
+                break
+        
         self.max_episode_steps = 1000
         while not success:
 
