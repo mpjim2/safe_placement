@@ -22,7 +22,7 @@ if __name__=="__main__":
     for x in range(10):
         
         env.reset()
-        for _ in range(1000):
+        for _ in range(10):
             action = env.action_space.sample()
             env.step(action)
         time.sleep(2)  

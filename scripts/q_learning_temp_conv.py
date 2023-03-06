@@ -200,7 +200,8 @@ class DQN_Algo():
             if done:
                 self.done_causes['testing'] = info['cause']
                 break
-
+        
+        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step)
         self.rewards_['testing'].append((float(reward), self.stepcount))
         self.ep_lengths_['testing'].append(step)
         
@@ -310,7 +311,7 @@ if __name__=='__main__':
     parser.add_argument('--nepochs', required=False, help='int', default='5')
     parser.add_argument('--lr', required=False, help='float', default="1e-4")
     parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
-    parser.add_argument('--continue_training', required=False, default='0')
+    #parser.add_argument('--continue_training', required=False, default='0')
     opt = parser.parse_args()
 
 
@@ -318,52 +319,52 @@ if __name__=='__main__':
     nepochs = int(opt.nepochs)
     lr = float(opt.lr)
 
-    continue_ = int(opt.continue_training)
+    #continue_ = int(opt.continue_training)
 
     time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
 
         
-    if continue_:
+    # if continue_:
 
-        if opt.savedir is None:
-            filepath = '/home/marco/Uni/Masterarbeit/Training/' 
-        else:
-            filepath = opt.savedir 
+    #     if opt.savedir is None:
+    #         filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/'
+    #     else:
+    #         filepath = opt.savedir 
     
 
-        all_subdirs = [filepath+d for d in os.listdir(filepath) if os.path.isdir(filepath + d)]
+    #     all_subdirs = [filepath+d for d in os.listdir(filepath) if os.path.isdir(filepath + d)]
 
-        last_modified = max(all_subdirs, key=os.path.getmtime)
+    #     last_modified = max(all_subdirs, key=os.path.getmtime)
 
-        with open(last_modified + '/training_progress.pickle', 'rb') as file:
-            progress = pickle.load(file) 
+    #     with open(last_modified + '/training_progress.pickle', 'rb') as file:
+    #         progress = pickle.load(file) 
 
-        algo = DQN_Algo(filepath=last_modified,
-                        lr=lr, 
-                        expl_slope=15000, 
-                        discount_factor=0.9, 
-                        mem_size=7500, 
-                        batch_size=batchsize, 
-                        n_epochs=nepochs, 
-                        tau=0.9,
-                        n_timesteps=10, 
-                        global_step=progress['global_step'])
+    #     algo = DQN_Algo(filepath=last_modified,
+    #                     lr=lr, 
+    #                     expl_slope=15000, 
+    #                     discount_factor=0.9, 
+    #                     mem_size=7500, 
+    #                     batch_size=batchsize, 
+    #                     n_epochs=nepochs, 
+    #                     tau=0.9,
+    #                     n_timesteps=10, 
+    #                     global_step=progress['global_step'])
 
-    else: 
+    # else: 
 
-        if opt.savedir is None:
-            filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
-        else:
-            filepath = opt.savedir + time_string + '/'
-    
-        algo = DQN_Algo(filepath=filepath,
-                    lr=lr, 
-                    expl_slope=10000, 
-                    discount_factor=0.9, 
-                    mem_size=5000, 
-                    batch_size=batchsize, 
-                    n_epochs=nepochs, 
-                    tau=0.9,
-                    n_timesteps=10)
+    if opt.savedir is None:
+        filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
+    else:
+        filepath = opt.savedir + time_string + '/'
+
+    algo = DQN_Algo(filepath=filepath,
+                lr=lr, 
+                expl_slope=10000, 
+                discount_factor=0.9, 
+                mem_size=5000, 
+                batch_size=batchsize, 
+                n_epochs=nepochs, 
+                tau=0.9,
+                n_timesteps=10)
 
     algo.train()    
