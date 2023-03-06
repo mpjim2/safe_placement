@@ -208,7 +208,7 @@ class DQN_Algo():
 
     def train(self):
         
-        for episode in range(self.N_EPOCHS):
+        for episode in range(1, self.N_EPOCHS+1):
         
             obs, info = self.env.reset()
             done = False

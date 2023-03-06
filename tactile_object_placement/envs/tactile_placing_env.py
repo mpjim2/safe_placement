@@ -508,7 +508,6 @@ class TactileObjectPlacementEnv(gym.Env):
             
             observation = self._get_obs()
 
-            print(observation['observation']['time_diff'])
             if self._check_object_grip() == False:
                 done = True
                 reward = -0.5
@@ -578,14 +577,18 @@ class TactileObjectPlacementEnv(gym.Env):
         super().reset(seed=seed)
         success = False
         
-        n = time.time()
-        while True:
-            if None not in self.current_msg.values():
-                print("All Msgs arrived after: " , time.time() - n)
-                break
         
         self.max_episode_steps = 1000
         while not success:
+
+            self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
+            self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
+
+            n = time.time()
+            while True:
+                if None not in self.current_msg.values():
+                    print("All Msgs arrived after: " , time.time() - n)
+                    break
 
             self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
             twist = self._compute_twist(0, 0, 0)
