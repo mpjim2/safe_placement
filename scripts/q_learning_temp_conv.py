@@ -90,7 +90,6 @@ class DQN_Algo():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        print(n_timesteps)
         #Policy and target network initilisation
         self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
         self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
@@ -244,7 +243,6 @@ class DQN_Algo():
                 self.stepcount += 1
 
                 if done:
-                    print(info)
                     self.done_causes['training'] = info['cause']
                     break
             
@@ -328,7 +326,7 @@ if __name__=='__main__':
     if continue_:
 
         if opt.savedir is None:
-            filepath = '/home/marco/Uni/Masterarbeit/Training/' 
+            filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' 
         else:
             filepath = opt.savedir 
     
@@ -342,9 +340,9 @@ if __name__=='__main__':
 
         algo = DQN_Algo(filepath=last_modified,
                         lr=lr, 
-                        expl_slope=10000, 
+                        expl_slope=15000, 
                         discount_factor=0.9, 
-                        mem_size=5000, 
+                        mem_size=7500, 
                         batch_size=batchsize, 
                         n_epochs=nepochs, 
                         tau=0.9,
@@ -354,7 +352,7 @@ if __name__=='__main__':
     else: 
 
         if opt.savedir is None:
-            filepath = '/home/marco/Uni/Masterarbeit/Training/' + time_string + '/'
+            filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
         else:
             filepath = opt.savedir + time_string + '/'
     
