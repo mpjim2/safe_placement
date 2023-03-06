@@ -326,7 +326,7 @@ if __name__=='__main__':
     if continue_:
 
         if opt.savedir is None:
-            filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' 
+            filepath = '/home/marco/Uni/Masterarbeit/Training/' 
         else:
             filepath = opt.savedir 
     
