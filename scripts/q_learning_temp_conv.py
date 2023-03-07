@@ -119,6 +119,8 @@ class DQN_Algo():
 
         else:
             self.stepcount = 0
+        
+        self.tableheight = 0.4
 
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -205,6 +207,7 @@ class DQN_Algo():
         self.rewards_['testing'].append((float(reward), self.stepcount))
         self.ep_lengths_['testing'].append(step)
         
+        return reward
 
     def train(self):
         
@@ -253,8 +256,14 @@ class DQN_Algo():
             self.ep_lengths_['training'].append(step)
             
             if episode % 5 == 0:
-                self.test()
+                r = self.test()
+                if r > 0:
+                    self.tableheight -= 0.1
+                    if self.tableheight < 0.01:
+                        self.tableheight = 0.01
+                        
                 self.save_checkpoint()
+
 
         self.save_checkpoint()
         self.env.close()
