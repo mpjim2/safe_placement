@@ -139,7 +139,9 @@ class DQN_Algo():
 
         self.done_causes = {'training' : [],
                            'testing'  : []}
-    
+
+        self.progress = []
+
     def save_checkpoint(self):
          
         torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Model')
@@ -154,8 +156,10 @@ class DQN_Algo():
             pickle.dump(self.done_causes, file)
 
         with open(self.FILEPATH + '/training_progress.pickle', 'wb') as file:
-            progress = {'global_step' : self.stepcount}
-            pickle.dump(progress, file)
+            
+            self.progress.append((self.stepcount, self.tableheight))
+            pickle.dump(self.progress, file)
+        
         return 0
     
     def select_action(self, state):
@@ -200,7 +204,7 @@ class DQN_Algo():
             state = next_state
 
             if done:
-                self.done_causes['testing'] = info['cause']
+                self.done_causes['testing'].append(info['cause'])
                 break
         
         print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step)
@@ -247,7 +251,7 @@ class DQN_Algo():
                 self.stepcount += 1
 
                 if done:
-                    self.done_causes['training'] = info['cause']
+                    self.done_causes['training'].append(info['cause'])
                     break
             
             print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ', (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
