@@ -174,7 +174,8 @@ class DQN_Algo():
 
     def test(self):
         
-        obs, _ = self.env.reset()
+        obs, info = self.env.reset(options={'min_table_height' : self.tableheight, 'testing' : True})
+
         done = False
 
         #ReInitialize cur_state_stack
@@ -208,7 +209,7 @@ class DQN_Algo():
                 break
         
         print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step)
-        self.rewards_['testing'].append((float(reward), self.stepcount))
+        self.rewards_['testing'].append((float(reward), self.stepcount, self.tableheight))
         self.ep_lengths_['testing'].append(step)
         
         return reward
@@ -217,7 +218,9 @@ class DQN_Algo():
         
         for episode in range(1, self.N_EPOCHS+1):
         
-            obs, info = self.env.reset()
+            obs, info = self.env.reset(options={'min_table_height' : self.tableheight, 'testing' : False})
+        
+            sampled_height = info['info']['tableheight']
             done = False
 
             #ReInitialize cur_state_stack
@@ -256,7 +259,7 @@ class DQN_Algo():
             
             print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ', (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
             
-            self.rewards_['training'].append((float(reward), self.stepcount))
+            self.rewards_['training'].append((float(reward), self.stepcount, sampled_height))
             self.ep_lengths_['training'].append(step)
             
             if episode % 5 == 0:

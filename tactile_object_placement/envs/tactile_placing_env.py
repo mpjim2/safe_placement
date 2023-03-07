@@ -617,8 +617,10 @@ class TactileObjectPlacementEnv(gym.Env):
             
             #make table
             if not options is None:
-                table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
-            
+                if options['testing'] == False:
+                    table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
+                else:
+                    table_height = options['min_table_height']
                 obj_geom_type = GeomType(value=6)
                 obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=table_height, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
                 resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
@@ -631,7 +633,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         observation = self._get_obs() 
     
-        info = {'info' : None}
+        info = {'info' : {'tableheight' : table_height}}
         return observation, info 
     
 
