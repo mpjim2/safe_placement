@@ -237,6 +237,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.003
 
+        self.table_height = 0.4
         self.max_table_height = 0.4
         self.curriculum = curriculum
         self.max_timesteps = 1000
@@ -467,7 +468,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
 
-        if np.min(corners[:, -1]) <= 0.001:
+        if np.min(corners[:, -1]) <= 0.00005 + self.table_height:
             
             quat = pq.Quaternion(quat)
             z_axis = rotate_vec(np.array([0, 0, 1]), quat)
@@ -618,11 +619,12 @@ class TactileObjectPlacementEnv(gym.Env):
             #make table
             if not options is None:
                 if options['testing'] == False:
-                    table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
+                    self.table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
                 else:
-                    table_height = options['min_table_height']
+                    self.table_height = options['min_table_height']
+
                 obj_geom_type = GeomType(value=6)
-                obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=table_height, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
+                obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=self.table_height, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
                 resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
                 if not resp.success:
                     rospy.logerr("SetGeomProperties:failed to set object parameters")        
