@@ -635,7 +635,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         observation = self._get_obs() 
     
-        info = {'info' : {'tableheight' : table_height}}
+        info = {'info' : {'tableheight' : self.table_height}}
         return observation, info 
     
 
