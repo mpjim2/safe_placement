@@ -17,15 +17,15 @@ if __name__=="__main__":
 
 
     # env.reset()
-    env.reset(options={'min_table_height' : 0.3})
+    env.reset(options={'min_table_height' : 0.1, 'testing' :True})
 
-    for x in range(10):
+    for x in range(5):
         
-        env.reset(options={'min_table_height' : 0.3})
+        env.reset(options={'min_table_height' : 0.1, 'testing' :True})
         # for _ in range(10):
         #     action = env.action_space.sample()
         #     env.step(action)
-        time.sleep(2)  
+        time.sleep(30)  
         # time.sleep(0.5)
         # if done: break
     # env.reset()

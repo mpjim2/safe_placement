@@ -148,9 +148,16 @@ class TactileObjectPlacementEnv(gym.Env):
                                          high=np.array([  2.175,  2.175,  2.175,  2.175,  2.61,  2.61,  2.61]),
                                          dtype=np.float64),
                 
-                "myrmex_l" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
+
+                #fingertip
+                "myrmex_l" : Box(low=0, high=1, shape=(32,), dtype=np.float64),
                 
-                "myrmex_r" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
+                "myrmex_r" : Box(low=0, high=1, shape=(32,), dtype=np.float64),
+
+                #myrmex plate
+                # "myrmex_l" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
+                
+                # "myrmex_r" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
 
                 "time_diff": Box(low=0, high=np.inf, shape=(len(self.current_msg),), dtype=np.int64)
             })
@@ -178,7 +185,7 @@ class TactileObjectPlacementEnv(gym.Env):
             uuid = roslaunch.rlutil.get_or_generate_uuid(options_runid=None, options_wait_for_master=False)
             roslaunch.configure_logging(uuid)
             pkg_path = rospkg.RosPack().get_path("safe_placement")
-            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch","panda.launch")], is_core=True)
+            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch","panda_fingertip.launch")], is_core=True)
             self.launch.start()
 
         rospy.init_node("SafePlacementEnvNode")
@@ -336,10 +343,10 @@ class TactileObjectPlacementEnv(gym.Env):
         joint_torques = np.array(current_obs.tau_J, dtype=np.float64)
         joint_velocities = np.array(current_obs.dq, dtype=np.float64)
         
-        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(16*16)
+        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(32)
         myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
-        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(16*16)
+        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(32)
         myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
         time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
