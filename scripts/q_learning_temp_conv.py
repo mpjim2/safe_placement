@@ -236,7 +236,7 @@ class DQN_Algo():
             for step in count():
                 #experience sample: state, action, reward,  state+1
                 action = self.select_action(state)
-                print(action)
+
                 obs, reward, done, _ , info = self.env.step(action)
 
                 reward = torch.tensor([reward])
