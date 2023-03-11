@@ -8,7 +8,7 @@ import numpy as np
 
 if __name__=="__main__":
 
-    env = gym.make('TactileObjectPlacementEnv-v0')
+    env = gym.make('TactileObjectPlacementEnv-v0', sensor="plate", continuous=False)
 
     # env.reset_world()
     # for i in range(10):
@@ -17,16 +17,14 @@ if __name__=="__main__":
 
 
     # env.reset()
-    env.reset(options={'min_table_height' : 0.1, 'testing' :True})
+    # env.reset(options={'min_table_height' : 0.1, 'testing' :True})
 
-    for x in range(5):
-        
+    for x in range(1):
         env.reset(options={'min_table_height' : 0.1, 'testing' :True})
-        # for _ in range(10):
-        #     action = env.action_space.sample()
-        #     env.step(action)
-        time.sleep(30)  
-        # time.sleep(0.5)
+        for _ in range(50):
+            #action = env.action_space.sample()
+            env.step(action=0)
+            time.sleep(2)
         # if done: break
     # env.reset()
         

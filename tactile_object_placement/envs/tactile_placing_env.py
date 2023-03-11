@@ -16,7 +16,7 @@ from franka_msgs.srv import SetEEFrame, SetLoad
 from tactile_msgs.msg import TactileState
 from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal
 
-from mujoco_ros_msgs.msg import GeomType, GeomProperties, BodyState, ScalarStamped
+from mujoco_ros_msgs.msg import GeomType, GeomProperties, BodyState, ScalarStamped, StepAction, StepGoal
 from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState, SetPause, SetGravity, GetGravity
 import tf.transformations
 import message_filters, actionlib
@@ -84,7 +84,7 @@ def compute_corner_coords(center, w, h, l, quat):
 class TactileObjectPlacementEnv(gym.Env):
     metadata = {}
 
-    def __init__(self, object_params=dict(), curriculum=False):
+    def __init__(self, object_params=dict(), curriculum=False, sensor="fingertip", continuous=False):
 
         super().__init__()
 
@@ -114,22 +114,36 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
         self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
-
+        
+        
         # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
+        
 
-
+        
         self.max_episode_steps = 1000
 
         self.DISCRETE_ACTIONS = []
 
         for x in [-1, 0, 1]:
-            for z in [0, -1]:
-                self.DISCRETE_ACTIONS.append([z,0,x,0])
+            for z in [1, 0, -1]:
+                self.DISCRETE_ACTIONS.append([z,x,0,0])
 
         self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
 
         self.action_space = Discrete(len(self.DISCRETE_ACTIONS))
+
+
+        if sensor == 'fingertip': 
+            tactile_obs = Box(low=0, high=1, shape=(32,), dtype=np.float64)        
+            launch_file = "panda_fingertip.launch"    
+            self.num_taxels = 32
+
+        elif sensor == 'plate':
+            tactile_obs = Box(low=0, high=1, shape=(16*16,), dtype=np.float64)
+            launch_file = "panda.launch"
+            self.num_taxels = 16*16
+
         self.observation_space = Dict({
             "observation" : Dict({
                 "ee_pose" : Box( low=np.array([-np.inf, -np.inf, -np.inf, -np.pi, -np.pi, -np.pi]), 
@@ -149,43 +163,22 @@ class TactileObjectPlacementEnv(gym.Env):
                                          dtype=np.float64),
                 
 
-                #fingertip
-                "myrmex_l" : Box(low=0, high=1, shape=(32,), dtype=np.float64),
+                "myrmex_l" : tactile_obs,
                 
-                "myrmex_r" : Box(low=0, high=1, shape=(32,), dtype=np.float64),
+                "myrmex_r" : tactile_obs,
 
-                #myrmex plate
-                # "myrmex_l" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
-                
-                # "myrmex_r" : Box(low=0, high=1, shape=(16*16,), dtype=np.float64),
 
                 "time_diff": Box(low=0, high=np.inf, shape=(len(self.current_msg),), dtype=np.int64)
             })
         })
 
-
-
         if not rosgraph.is_master_online(): # check if ros master is already running
             print("starting launch file...")
 
-            # uuid = roslaunch.rlutil.get_or_generate_uuid(options_runid=None, options_wait_for_master=False)
-            # roslaunch.configure_logging(uuid)            
-            
-            # pkg_path = rospkg.RosPack().get_path("safe_placement")
-            
-            # if curriculum: 
-            #     cli_args = [os.path.join(pkg_path, "launch","panda.launch"), ''.join(["modelfile:=", '\"', "panda_table_world.xml", '\"']) ]
-            # else:
-            #     cli_args = [os.path.join(pkg_path, "launch","panda.launch"), ''.join(["modelfile:=", '\"', "panda_world.xml", '\"'])] 
-
-            # roslaunch_file = [(roslaunch.rlutil.resolve_launch_arguments(cli_args))[0], cli_args[1]]
-
-            # self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_file)
-            # self.launch.start()
             uuid = roslaunch.rlutil.get_or_generate_uuid(options_runid=None, options_wait_for_master=False)
             roslaunch.configure_logging(uuid)
             pkg_path = rospkg.RosPack().get_path("safe_placement")
-            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch","panda_fingertip.launch")], is_core=True)
+            self.launch = roslaunch.parent.ROSLaunchParent(uuid, roslaunch_files=[os.path.join(pkg_path, "launch", launch_file)], is_core=True)
             self.launch.start()
 
         rospy.init_node("SafePlacementEnvNode")
@@ -214,8 +207,18 @@ class TactileObjectPlacementEnv(gym.Env):
         self.get_gravity         = rospy.ServiceProxy("mujoco_server/get_gravity", GetGravity)
         self.set_load            = rospy.ServiceProxy("/franka_control/set_load", SetLoad)
         
+        #Action Client for Simulation Step
 
-        resp = self.pause_sim(paused=False)
+        self.continuous = continuous
+        if not continuous:
+            self.action_client = actionlib.SimpleActionClient("/mujoco_server/step", StepAction)
+            rospy.loginfo("Waiting for action server...")
+            self.action_client.wait_for_server()
+            rospy.loginfo("Action server started")
+            self._perform_sim_steps(num_sim_steps=100)
+            rospy.loginfo("Initial simulation steps finished")
+        
+        # resp = self.pause_sim(paused=False)
      
         self.twist_pub = rospy.Publisher('/cartesian_impedance_controller/twist_cmd', Twist, queue_size=1)
 
@@ -230,7 +233,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.grasp_client.wait_for_server()
         rospy.loginfo("Action server started!")
 
-        
+      
         self.obj_height = 0
         self.obj_types = object_params.get("types", ["box"])
         self.range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
@@ -244,8 +247,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.003
 
-        self.table_height = 0.4
-        self.max_table_height = 0.4
+        self.table_height = 0.25
+        self.max_table_height = 0.25
         self.curriculum = curriculum
         self.max_timesteps = 1000
 
@@ -306,7 +309,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         diff = m_diag - np.linalg.norm(obj_axis_n) 
         if diff >= 0:
-            min_shift = diff + 0.003
+            min_shift = diff + 0.005
         else:
             min_shift = 0
 
@@ -343,10 +346,11 @@ class TactileObjectPlacementEnv(gym.Env):
         joint_torques = np.array(current_obs.tau_J, dtype=np.float64)
         joint_velocities = np.array(current_obs.dq, dtype=np.float64)
         
-        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(32)
+
+        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
         myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
-        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(32)
+        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
         myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
         time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
@@ -370,13 +374,13 @@ class TactileObjectPlacementEnv(gym.Env):
 
         # quat = deepcopy(quat_init)
         if rotate_X > 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.04)
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.1)
         elif rotate_X < 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.04)
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.1)
         if rotate_Y > 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.04)
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.1)
         elif rotate_Y < 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.04)
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.1)
         
         # if quat_dot(quat_init, quat) < 0:
         # quat *= -1
@@ -387,9 +391,9 @@ class TactileObjectPlacementEnv(gym.Env):
 
         pos = np.zeros(3)
         if translate_Z > 0:
-            pos[2] -= 0.005
+            pos[2] -= 0.05
         elif translate_Z < 0:
-            pos[2] += 0.005
+            pos[2] += 0.05
 
         twist_msg = Twist()
 
@@ -410,7 +414,7 @@ class TactileObjectPlacementEnv(gym.Env):
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
         ee_pos           = transformationEE[:3, -1]
-
+        ee_pos[2] -= 0.025
         check = np.linalg.norm(ee_pos - obj_pos) <= self.obj_height/2 + 0.02 
 
         return check
@@ -419,53 +423,68 @@ class TactileObjectPlacementEnv(gym.Env):
         goal = MoveGoal(width=width, speed=0.05)
 
         self.release_client.send_goal(goal)
-        self.release_client.wait_for_result()
-
-        success = self.release_client.get_result()
-        if not success:
-            rospy.logerr("Open Action failed!")
+     
+        if self.continuous:
+            self.release_client.wait_for_result()
+            success = self.release_client.get_result()
+            if not success:
+                rospy.logerr("Open Action failed!")
+        else:
+            success = None
+            while success is None:
+                self._perform_sim_steps(100)
+                success = self.release_client.get_result()
 
         return success
 
     def _close_gripper(self, width, eps, speed, force):
-        
         epsilon = GraspEpsilon(inner=eps, outer=eps)
-        goal_ = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)
+        goal = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)
         
-        self.grasp_client.send_goal(goal_)
-        self.grasp_client.wait_for_result()
+        self.grasp_client.send_goal(goal)
 
-        success = self.grasp_client.get_result()
-
-        if not success:
-            rospy.logerr("Grasp Action failed!")
+        # self.pause_sim(paused=False)
+        if self.continuous:
+            self.grasp_client.wait_for_result()
+            success = self.grasp_client.get_result()
+            
+            if not success:
+                rospy.logerr("Grasp Action failed!")
+        else:
+            success = None
+            while success is None:
+                self._perform_sim_steps(100)
+                success = self.grasp_client.get_result()
+        
+        # self.pause_sim(paused=True)
 
         return success
 
     def _setLoad(self, mass, load_inertia): 
-        
-        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
-        
+
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
         ee_pos           = transformationEE[:3, -1]
         
         #subtract EE to flange transformation
         ee_pos -= np.array([0, 0, 0.17])
-
-        F_x_center_load = list(ee_pos - obj_pos)
+        if mass != 0:
+            obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+        
+            F_x_center_load = list(ee_pos - obj_pos)
+        else:
+            F_x_center_load = list(ee_pos)
         #Fingertip params
         # mass = 0.078*2 #mass of two ubi fingertips
         # F_x_center_load = [0,0,0.17]
         # load_inertia = [0, 0, 0.000651, 0, 0, 0.000651, 0, 0, 0.000896]
-
+    
         #{0,0,0.17} translation from flange to in between fingers; default for f_x_center
         response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
         
         return response.success
 
     def _compute_reward(self):
-        
         #object Y-Value in World Frame
         obj_pos = point_to_numpy(self.current_msg['object_pos'].point)       
         obj_h = obj_pos[-1]
@@ -474,6 +493,7 @@ class TactileObjectPlacementEnv(gym.Env):
         quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
+
 
         if np.min(corners[:, -1]) <= 0.00005 + self.table_height:
             
@@ -489,38 +509,56 @@ class TactileObjectPlacementEnv(gym.Env):
             reward = -1 
         
         return reward    
-        
+    
+    def _perform_sim_steps(self, num_sim_steps):
+        goal = StepGoal(num_steps=num_sim_steps)
+        self.action_client.send_goal(goal)
+        self.action_client.wait_for_result()
+        success = self.action_client.get_result()
+        if not success:
+            rospy.logerr("Step action failed")
+        rospy.rostime.wallsleep(0.1)
 
     def step(self, action):
-
         self.max_episode_steps -= 1
 
         done = False
 
         action = self.DISCRETE_ACTIONS[action]
+       
+       
         #[0, 1, 2, 3]
         #0 not terminated
         #1 opened gripper
         #2 ran out of time
         #3 lost object
-
         info = {'cause' : 0}
         if action[-1] == 1 or self.max_episode_steps==0:
             #Stop movement of arm
             stop_ = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(stop_)
-            
+    
             observation = self._get_obs()
             #Compute reward before Opening Gripper; Else ground contact is uninformative as object falls down
+    
+            
             reward = self._compute_reward()
 
             if action[-1] == 1:
                 self._open_gripper()
-                self._compute_twist(0,0,1)
                 
+                self._compute_twist(0,0,1)
+                if not self.continuous:
+                    self._perform_sim_steps(250)
+                    r2 = self._compute_reward()
+
+                    if reward == -1 and r2 > 0:
+                        reward = 0.3
+                    
                 info['cause'] = 1
-                time.sleep(0.5)
+
             else:
+                reward = -0.5
                 info['cause'] = 2
             done = True
         
@@ -528,12 +566,14 @@ class TactileObjectPlacementEnv(gym.Env):
 
             reward = 0
 
-            twist = self._compute_twist(action[1], 
-                                        action[2], 
+            twist = self._compute_twist(action[2], 
+                                        action[1], 
                                         action[0])
 
             self.twist_pub.publish(twist)
             
+            self._perform_sim_steps(np.random.randint(50, 250))
+
             observation = self._get_obs()
 
             if self._check_object_grip() == False:
@@ -544,22 +584,26 @@ class TactileObjectPlacementEnv(gym.Env):
         return observation, reward, done, False, info
 
     def _initial_grasp(self):
-        
         self._open_gripper()
         # self.pause_sim(paused=True)
         
         resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
         if resp:    
-
             self.set_object_params()
-
 
         grasp_success = self._close_gripper(width=self.obj_size_1*2, force=20.0, eps=0.005, speed=0.01)
         
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
             resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
-        
+
+            self._perform_sim_steps(100)
+
+            if not self._check_object_grip():
+                grasp_success = False
+
+        if not grasp_success:
+            print("Grasp unsuccessful. Retry...")
         return grasp_success
 
     def set_object_params(self):
@@ -582,8 +626,6 @@ class TactileObjectPlacementEnv(gym.Env):
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
 
-        
-
     def _new_msg_callback(self, msg):
         topic = msg._connection_header["topic"]
 
@@ -601,24 +643,40 @@ class TactileObjectPlacementEnv(gym.Env):
             self.current_msg[key[0]] = msg
           
     def reset(self, seed=None, options=None):
-
+        
         super().reset(seed=seed)
         success = False
         
         self.max_episode_steps = 1000
         while not success:
 
+
+            # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
+            # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
+
             self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
             self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
-            n = time.time()
-            while True:
-                if None not in self.current_msg.values():
-                    print("All Msgs arrived after: " , time.time() - n)
-                    break
+            #wait for messages
+            if self.continuous:
+                n = time.time()
+                while True:
+                    if None not in self.current_msg.values():
+                        print("All Msgs arrived after: " , time.time() - n)
+                        break
+            else:
+                while True:
+                    self._perform_sim_steps(1)
+                    if None not in self.current_msg.values():
+                        break
 
             self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
+            
             twist = self._compute_twist(0, 0, 0)
+
+            if self.continuous:
+                self._perform_sim_steps(10)
+
             self.twist_pub.publish(twist)
 
             self.reset_world()
@@ -643,9 +701,9 @@ class TactileObjectPlacementEnv(gym.Env):
         observation = self._get_obs() 
     
         info = {'info' : {'tableheight' : self.table_height}}
+
         return observation, info 
     
-
     def close(self):
         if "self.launch" in locals():
             self.launch.stop()

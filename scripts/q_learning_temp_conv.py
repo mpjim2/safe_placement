@@ -86,7 +86,7 @@ class DQN_Algo():
         if not os.path.exists(self.FILEPATH):
             os.makedirs(self.FILEPATH)
 
-        self.env = gym.make('TactileObjectPlacementEnv-v0')
+        self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor="plate")
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -236,7 +236,7 @@ class DQN_Algo():
             for step in count():
                 #experience sample: state, action, reward,  state+1
                 action = self.select_action(state)
-                
+                print(action)
                 obs, reward, done, _ , info = self.env.step(action)
 
                 reward = torch.tensor([reward])
