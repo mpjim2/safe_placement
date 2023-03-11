@@ -4,7 +4,7 @@
 
   <!-- Robot Customization -->
   <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
-  <arg name="unpause"     default="true"  doc="Should the simulation be unpaused on start?" />
+  <arg name="unpause"     default="false"  doc="Should the simulation be unpaused on start?" />
   <arg name="rviz"        default="false"  doc="Should rviz be spawned?" />
   <arg name="arm_id"      default="panda" doc="Name of the panda robot to spawn" />
   <arg name="use_gripper" default="true"  doc="Should a franka hand be mounted on the flange?" />
@@ -25,7 +25,7 @@
   <arg name="realtime" default="-1.0" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
   <arg name="render_offscreen" default="false" doc="Should camera streams be rendered and published?" />
   <arg name="use_fingertips" default="false" doc="Should Shadowhandfingertips be mounted to the gripper fingers?" />
-  <arg name="no_x" default="false" />
+  <arg name="no_x" default="true" />
   <!-- <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" /> -->
   <arg name="transmission" default="effort" />
   <arg name="load_gripper" default="true" />
