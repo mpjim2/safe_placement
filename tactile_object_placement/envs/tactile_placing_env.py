@@ -55,12 +55,12 @@ def quaternion_to_numpy(quaternion):
 def point_to_numpy(point):
     return np.array([point.x, point.y, point.z])
 
-def compute_corner_coords(center, w, h, l, quat):
+def compute_corner_coords(center, w, l, h, quat):
 
     # Calculate half-lengths
-    half_width = w / 2
-    half_height = h / 2
-    half_length = l / 2
+    half_width = w 
+    half_height = h 
+    half_length = l 
 
     # Convert quaternion to rotation matrix
     rot_matrix = R.from_quat(quat).as_matrix()
@@ -247,8 +247,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.005
 
-        self.table_height = 0.35
-        self.max_table_height = 0.35
+        self.table_height = 0.15
+        self.max_table_height = 0.15
         self.curriculum = curriculum
         self.max_timesteps = 1000
 
@@ -374,13 +374,13 @@ class TactileObjectPlacementEnv(gym.Env):
 
         # quat = deepcopy(quat_init)
         if rotate_X > 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.1)
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.08)
         elif rotate_X < 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.1)
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.08)
         if rotate_Y > 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.1)
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.08)
         elif rotate_Y < 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.1)
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.08)
         
         # if quat_dot(quat_init, quat) < 0:
         # quat *= -1
@@ -391,9 +391,9 @@ class TactileObjectPlacementEnv(gym.Env):
 
         pos = np.zeros(3)
         if translate_Z > 0:
-            pos[2] -= 0.05
+            pos[2] -= 0.03
         elif translate_Z < 0:
-            pos[2] += 0.05
+            pos[2] += 0.03
 
         twist_msg = Twist()
 
@@ -496,9 +496,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
 
-
-        if np.min(corners[:, -1]) <= 0.00005 + self.table_height:
-            
+        if np.min(corners[:, -1]) <= 0.0075 + self.table_height*2:
             quat = pq.Quaternion(quat)
             z_axis = rotate_vec(np.array([0, 0, 1]), quat)
                     
@@ -546,14 +544,13 @@ class TactileObjectPlacementEnv(gym.Env):
 
             if action[-1] == 1:
                 self._open_gripper()
-                
                 self._compute_twist(0,0,1)
-                if not self.continuous:
-                    self._perform_sim_steps(250)
-                    r2 = self._compute_reward()
+                # if not self.continuous:
+                #     self._perform_sim_steps(250)
+                #     r2 = self._compute_reward()
 
-                    if reward == -1 and r2 > 0:
-                        reward = 0.3
+                #     if reward == -1 and r2 > 0:
+                #         reward = 0.3
                     
                 info['cause'] = 1
 
@@ -728,6 +725,10 @@ class TactileObjectPlacementEnv(gym.Env):
                 if not resp.success:
                     rospy.logerr("SetGeomProperties:failed to set object parameters")        
 
+                body_state = BodyState(env_id=0, name="table", pose=nparray_to_posestamped(np.array([0.3, 0, self.table_height]), np.array([1,0,0,0])), mass=50)
+                resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
+                if not resp.success:
+                    rospy.logerr("SetBodyState: failed to set object pose or object mass")
             success = self._initial_grasp()
 
         observation = self._get_obs() 
