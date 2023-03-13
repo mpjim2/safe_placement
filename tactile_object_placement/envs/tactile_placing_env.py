@@ -452,10 +452,9 @@ class TactileObjectPlacementEnv(gym.Env):
                 rospy.logerr("Grasp Action failed!")
         else:
             success = None
-            while success is None:
+            while success is None: 
                 self._perform_sim_steps(10)
                 success = self.grasp_client.get_result()
-        
         # self.pause_sim(paused=True)
 
         return success
@@ -481,7 +480,6 @@ class TactileObjectPlacementEnv(gym.Env):
     
         #{0,0,0.17} translation from flange to in between fingers; default for f_x_center
         response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
-        
         return response.success
 
     def _compute_reward(self):
@@ -517,7 +515,7 @@ class TactileObjectPlacementEnv(gym.Env):
         success = self.action_client.get_result()
         if not success:
             rospy.logerr("Step action failed")
-        rospy.rostime.wallsleep(0.1)
+        # rospy.rostime.wallsleep(0.1)
 
     def step(self, action):
         self.max_episode_steps -= 1
@@ -604,13 +602,16 @@ class TactileObjectPlacementEnv(gym.Env):
             print("Grasp unsuccessful. Retry...")
         return grasp_success
 
-    def set_object_params(self):
+    def set_object_params(self, sample=True):
+        
         # sample object type, mass, sliding friction, height, radius, length, width
-        self._sample_obj_params()        
+        self._sample_obj_params() 
+
 
         # sample object start pose
         obj_pos, obj_quat = self._sample_object_pose()
 
+  
         # set object properties
         obj_geom_type = GeomType(value=self.obj_geom_type_value)
         obj_geom_properties = GeomProperties(env_id=0, name="object_geom", type=obj_geom_type, size_0=self.obj_size_0, size_1=self.obj_size_1, size_2=self.obj_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
@@ -639,7 +640,42 @@ class TactileObjectPlacementEnv(gym.Env):
                     return
                 self.last_timestamps[key[0]] = self.current_msg[key[0]].header.stamp # remember timestamp of old message
             self.current_msg[key[0]] = msg
-          
+    
+    def _set_world_to_initial_state(self, options):
+        
+        self.reset_world()
+
+        #stop all movement
+        self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
+        twist = self._compute_twist(0, 0, 0)
+        self.twist_pub.publish(twist)
+
+        #Delete Old messages
+        self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
+        self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
+        #wait for all messages to arrive
+        while True:
+            self._perform_sim_steps(1)
+            if None not in self.current_msg.values():
+                break
+        
+        if not options is None:
+            if options['testing'] == False:
+                self.table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
+            else:
+                self.table_height = options['min_table_height']
+
+            obj_geom_type = GeomType(value=6)
+            obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=self.table_height, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
+            resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+            if not resp.success:
+                rospy.logerr("SetGeomProperties:failed to set object parameters")        
+                
+        #reset step counter
+        self.max_episode_steps = 1000
+        return 0
+    
+
     def reset(self, seed=None, options=None):
         
         super().reset(seed=seed)
@@ -649,10 +685,6 @@ class TactileObjectPlacementEnv(gym.Env):
         
         self.max_episode_steps = 1000
         while not success:
-
-
-            # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
-            # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
 
             self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
             self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
@@ -674,8 +706,6 @@ class TactileObjectPlacementEnv(gym.Env):
             twist = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(twist)
             
-
-
             self.reset_world()
             if not self.continuous:
                 self._perform_sim_steps(10)
@@ -692,6 +722,7 @@ class TactileObjectPlacementEnv(gym.Env):
                 if not resp.success:
                     rospy.logerr("SetGeomProperties:failed to set object parameters")        
 
+            self.set_object_params(sample=False)
             success = self._initial_grasp()
 
         observation = self._get_obs() 
