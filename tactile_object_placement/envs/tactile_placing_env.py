@@ -247,8 +247,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.003
 
-        self.table_height = 0.25
-        self.max_table_height = 0.25
+        self.table_height = 0.35
+        self.max_table_height = 0.35
         self.curriculum = curriculum
         self.max_timesteps = 1000
 
@@ -432,7 +432,7 @@ class TactileObjectPlacementEnv(gym.Env):
         else:
             success = None
             while success is None:
-                self._perform_sim_steps(100)
+                self._perform_sim_steps(10)
                 success = self.release_client.get_result()
 
         return success
@@ -453,7 +453,7 @@ class TactileObjectPlacementEnv(gym.Env):
         else:
             success = None
             while success is None:
-                self._perform_sim_steps(100)
+                self._perform_sim_steps(10)
                 success = self.grasp_client.get_result()
         
         # self.pause_sim(paused=True)
@@ -539,9 +539,7 @@ class TactileObjectPlacementEnv(gym.Env):
             self.twist_pub.publish(stop_)
     
             observation = self._get_obs()
-            #Compute reward before Opening Gripper; Else ground contact is uninformative as object falls down
-    
-            
+            #Compute reward before Opening Gripper; Else ground contact is uninformative as object falls down        
             reward = self._compute_reward()
 
             if action[-1] == 1:
@@ -572,7 +570,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
             self.twist_pub.publish(twist)
             
-            self._perform_sim_steps(np.random.randint(50, 250))
+            self._perform_sim_steps(np.random.randint(10, 50))
 
             observation = self._get_obs()
 
@@ -645,6 +643,8 @@ class TactileObjectPlacementEnv(gym.Env):
     def reset(self, seed=None, options=None):
         
         super().reset(seed=seed)
+
+        self.reset_world()
         success = False
         
         self.max_episode_steps = 1000
@@ -671,17 +671,15 @@ class TactileObjectPlacementEnv(gym.Env):
                         break
 
             self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
-            
             twist = self._compute_twist(0, 0, 0)
-
-            if self.continuous:
-                self._perform_sim_steps(10)
-
             self.twist_pub.publish(twist)
+            
+
 
             self.reset_world()
-            
-            #make table
+            if not self.continuous:
+                self._perform_sim_steps(10)
+
             if not options is None:
                 if options['testing'] == False:
                     self.table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
@@ -693,8 +691,6 @@ class TactileObjectPlacementEnv(gym.Env):
                 resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
                 if not resp.success:
                     rospy.logerr("SetGeomProperties:failed to set object parameters")        
-
-            self._open_gripper()
 
             success = self._initial_grasp()
 
