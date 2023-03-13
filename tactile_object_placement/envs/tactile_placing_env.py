@@ -245,7 +245,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.range_obj_x_pos = object_params.get("range_x_pos", np.array([0.275,0.525])) #[m]
         self.range_obj_y_pos = object_params.get("range_y_pos", np.array([-0.2,0.2])) #[m]
 
-        self.sensor_thickness = 0.003
+        self.sensor_thickness = 0.005
 
         self.table_height = 0.35
         self.max_table_height = 0.35
@@ -420,7 +420,9 @@ class TactileObjectPlacementEnv(gym.Env):
         return check
 
     def _open_gripper(self, width=0.08):
-        goal = MoveGoal(width=width, speed=0.05)
+
+        self.release_client.cancel_all_goals()
+        goal = MoveGoal(width=width, speed=0.03)
 
         self.release_client.send_goal(goal)
      
@@ -438,6 +440,8 @@ class TactileObjectPlacementEnv(gym.Env):
         return success
 
     def _close_gripper(self, width, eps, speed, force):
+        
+        self.grasp_client.cancel_all_goals()
         epsilon = GraspEpsilon(inner=eps, outer=eps)
         goal = GraspGoal(width=width, epsilon=epsilon, speed=speed, force=force)
         
@@ -580,15 +584,18 @@ class TactileObjectPlacementEnv(gym.Env):
         return observation, reward, done, False, info
 
     def _initial_grasp(self):
-        self._open_gripper()
-        # self.pause_sim(paused=True)
         
+        open = False
+        while not open:
+            open = self._open_gripper()
+        # self.pause_sim(paused=True)
+  
         resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
         if resp:    
             self.set_object_params()
 
-        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=20.0, eps=0.005, speed=0.01)
-        
+        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=20.0, eps=0.005, speed=0.03)
+
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
             resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
@@ -682,7 +689,6 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.reset_world()
         success = False
-        
         self.max_episode_steps = 1000
         while not success:
 
@@ -722,7 +728,6 @@ class TactileObjectPlacementEnv(gym.Env):
                 if not resp.success:
                     rospy.logerr("SetGeomProperties:failed to set object parameters")        
 
-            self.set_object_params(sample=False)
             success = self._initial_grasp()
 
         observation = self._get_obs() 
