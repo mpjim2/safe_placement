@@ -80,7 +80,6 @@ def compute_corner_coords(center, w, l, h, quat):
 
     return corners_global
 
-
 class TactileObjectPlacementEnv(gym.Env):
     metadata = {}
 
@@ -146,8 +145,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.observation_space = Dict({
             "observation" : Dict({
-                "ee_pose" : Box( low=np.array([-np.inf, -np.inf, -np.inf, -np.pi, -np.pi, -np.pi]), 
-                                 high=np.array([np.inf, np.inf, np.inf, np.pi, np.pi, np.pi]),
+                "ee_pose" : Box( low=np.array([-np.inf, -np.inf, -np.inf, -np.pi, -np.pi/2, -np.pi]), 
+                                 high=np.array([np.inf, np.inf, np.inf, np.pi, np.pi/2, np.pi]),
                                  dtype=np.float64),
                 
                 "joint_positions" : Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]), 
@@ -247,10 +246,24 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.005
 
-        self.table_height = 0.15
-        self.max_table_height = 0.15
+        self.table_height = 0.17
+        self.max_table_height = 0.17
         self.curriculum = curriculum
         self.max_timesteps = 1000
+
+
+        while True:
+            self._perform_sim_steps(100)
+            if None not in self.current_msg.values():
+                break
+
+        self._set_EE_frame_to_gripcenter()
+
+    def _update_space_limits(self):
+        
+        self.observation_space["observation"]["ee_pose"] = Box( low=np.array([-np.inf, -np.inf, self.table_height*2 + 0.022, -np.pi, -np.pi/2, -np.pi]), 
+                                                                high=np.array([np.inf, np.inf, 0.5, np.pi, np.pi/2, np.pi]),
+                                                                dtype=np.float64)
 
     def _sample_obj_params(self):
         # sample new object/target type
@@ -284,6 +297,9 @@ class TactileObjectPlacementEnv(gym.Env):
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
 
+        # current_obs = self.current_msg['franka_state']        
+        # pos, quat, _ = self._pose_quat_from_trafo(current_obs.F_T_EE)
+
         position    = transformationEE[:3, -1]
 
         y_angle = np.random.uniform(low=-np.pi/2, high=np.pi/2)
@@ -295,7 +311,7 @@ class TactileObjectPlacementEnv(gym.Env):
         obj_axis = np.array(rotate_vec(v=[0,0,1], q=py_quat))
         
         #Mittelpunkt der Myrmex Sensoren
-        position[2] -= 0.025
+        # position[2] -= 0.025
 
         #position of myrmex corners: 
         # [-0.02, X, -0.02]
@@ -333,7 +349,31 @@ class TactileObjectPlacementEnv(gym.Env):
         
         return position, orientation_q, orientation_xyz
 
-    def _get_obs(self):
+    def _set_EE_frame_to_gripcenter(self): 
+
+        current_obs = self.current_msg['franka_state']        
+        gripper_pos, gripper_quat, _ = self._pose_quat_from_trafo(current_obs.F_T_EE)
+
+        gripper_pos[-1] -= 0.076     
+        ee_trafo = tf.transformations.quaternion_matrix(np.array([1,0,0,0]))
+        ee_trafo[0:3,-1] = gripper_pos
+
+        set_EE_frame = rospy.ServiceProxy("/franka_control/set_EE_frame", SetEEFrame)
+        resp = set_EE_frame(NE_T_EE=tuple((ee_trafo.T).ravel()))  # column-major format
+        if not resp.success:
+            rospy.logerr("SetEEFrame: failed to set fixed EE trafo")
+
+        # wait for a new franka_state msg
+        self._perform_sim_steps(100)
+        self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
+        self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
+
+        while True:
+            self._perform_sim_steps(1)
+            if None not in self.current_msg.values():
+                break
+            
+    def _get_obs(self, return_quat=False):
         
         current_obs = self.current_msg['franka_state']
         
@@ -365,22 +405,29 @@ class TactileObjectPlacementEnv(gym.Env):
                        "time_diff" : time_diff
                        }
 
-
-        return {"observation" : observation}
-
+        if not return_quat:
+            return {"observation" : observation}
+        else:
+            return {"observation" : observation}, ee_quat
+        
     def _compute_twist(self, rotate_X, rotate_Y, translate_Z):
 
         quat = pq.Quaternion()
 
+        current_pose, _ = self._get_obs(return_quat=True)
+        current_pose = current_pose["observation"]["ee_pose"]
+
         # quat = deepcopy(quat_init)
-        if rotate_X > 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.08)
-        elif rotate_X < 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.08)
-        if rotate_Y > 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.08)
-        elif rotate_Y < 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.08)
+
+        if rotate_X > 0 and current_pose[4] < self.observation_space["observation"]["ee_pose"].high[4]:
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.5)
+        elif rotate_X < 0 and current_pose[4] > self.observation_space["observation"]["ee_pose"].low[4]:
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.5)
+        
+        if rotate_Y > 0  and current_pose[2] > self.observation_space["observation"]["ee_pose"].low[2]:
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.5)
+        elif rotate_Y < 0 and current_pose[2] < self.observation_space["observation"]["ee_pose"].high[2]:
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.5)
         
         # if quat_dot(quat_init, quat) < 0:
         # quat *= -1
@@ -390,10 +437,13 @@ class TactileObjectPlacementEnv(gym.Env):
         xyz = quat.vector 
 
         pos = np.zeros(3)
-        if translate_Z > 0:
-            pos[2] -= 0.03
-        elif translate_Z < 0:
-            pos[2] += 0.03
+        if translate_Z < 0:  
+            if current_pose[2] > self.observation_space["observation"]["ee_pose"].low[2]:      
+                pos[2] += 0.01
+        
+        elif translate_Z > 0:
+            if current_pose[2] < self.observation_space["observation"]["ee_pose"].high[2]:
+                pos[2] -= 0.01
 
         twist_msg = Twist()
 
@@ -414,7 +464,6 @@ class TactileObjectPlacementEnv(gym.Env):
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
         ee_pos           = transformationEE[:3, -1]
-        ee_pos[2] -= 0.025
         check = np.linalg.norm(ee_pos - obj_pos) <= self.obj_height/2 + 0.02 
 
         return check
@@ -429,14 +478,15 @@ class TactileObjectPlacementEnv(gym.Env):
         if self.continuous:
             self.release_client.wait_for_result()
             success = self.release_client.get_result()
-            if not success:
-                rospy.logerr("Open Action failed!")
+            
         else:
             success = None
             while success is None:
                 self._perform_sim_steps(10)
                 success = self.release_client.get_result()
-
+        
+        if not success:
+            rospy.logerr("Open Action failed!")
         return success
 
     def _close_gripper(self, width, eps, speed, force):
@@ -452,19 +502,18 @@ class TactileObjectPlacementEnv(gym.Env):
             self.grasp_client.wait_for_result()
             success = self.grasp_client.get_result()
             
-            if not success:
-                rospy.logerr("Grasp Action failed!")
         else:
             success = None
             while success is None: 
                 self._perform_sim_steps(10)
                 success = self.grasp_client.get_result()
         # self.pause_sim(paused=True)
-
+        if not success:
+            rospy.logerr("Grasp Action failed!")
         return success
 
     def _setLoad(self, mass, load_inertia): 
-
+        
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
         ee_pos           = transformationEE[:3, -1]
@@ -483,7 +532,11 @@ class TactileObjectPlacementEnv(gym.Env):
         # load_inertia = [0, 0, 0.000651, 0, 0, 0.000651, 0, 0, 0.000896]
     
         #{0,0,0.17} translation from flange to in between fingers; default for f_x_center
-        response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
+        response = None
+        while response is None:
+            response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
+            self._perform_sim_steps(1)
+
         return response.success
 
     def _compute_reward(self):
@@ -555,6 +608,7 @@ class TactileObjectPlacementEnv(gym.Env):
                 info['cause'] = 1
 
             else:
+
                 reward = -0.5
                 info['cause'] = 2
             done = True
@@ -574,6 +628,7 @@ class TactileObjectPlacementEnv(gym.Env):
             observation = self._get_obs()
 
             if self._check_object_grip() == False:
+
                 done = True
                 reward = -0.5
                 info['cause'] = 3
@@ -679,7 +734,6 @@ class TactileObjectPlacementEnv(gym.Env):
         self.max_episode_steps = 1000
         return 0
     
-
     def reset(self, seed=None, options=None):
         
         super().reset(seed=seed)
@@ -701,11 +755,12 @@ class TactileObjectPlacementEnv(gym.Env):
                         break
             else:
                 while True:
-                    self._perform_sim_steps(1)
+                    self._perform_sim_steps(10)
                     if None not in self.current_msg.values():
                         break
-
+            
             self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
+            
             twist = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(twist)
             
@@ -729,8 +784,10 @@ class TactileObjectPlacementEnv(gym.Env):
                 resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
                 if not resp.success:
                     rospy.logerr("SetBodyState: failed to set object pose or object mass")
+
             success = self._initial_grasp()
 
+        self._update_space_limits()
         observation = self._get_obs() 
     
         info = {'info' : {'tableheight' : self.table_height}}
