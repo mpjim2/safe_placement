@@ -120,7 +120,7 @@ class DQN_Algo():
         else:
             self.stepcount = 0
         
-        self.tableheight = 0.15
+        self.tableheight = 0.17
 
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
