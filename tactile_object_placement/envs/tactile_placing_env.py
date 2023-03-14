@@ -396,7 +396,9 @@ class TactileObjectPlacementEnv(gym.Env):
         try:
             time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
         except:
+            time_diff = np.zeros(len(self.current_msg.keys()))
             print("ERROR: could not compute time diff!")
+
         observation = {
                        "ee_pose" : pose, 
                        "joint_positions" : joint_positions,
