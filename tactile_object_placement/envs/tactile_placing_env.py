@@ -393,8 +393,10 @@ class TactileObjectPlacementEnv(gym.Env):
         myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
         myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
-        time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
-
+        try:
+            time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
+        except:
+            print("ERROR: could not compute time diff!")
         observation = {
                        "ee_pose" : pose, 
                        "joint_positions" : joint_positions,
