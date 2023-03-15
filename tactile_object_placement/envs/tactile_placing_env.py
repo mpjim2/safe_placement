@@ -14,7 +14,7 @@ from geometry_msgs.msg import PoseStamped, PointStamped, QuaternionStamped, Twis
 from franka_msgs.msg import FrankaState
 from franka_msgs.srv import SetEEFrame, SetLoad
 from tactile_msgs.msg import TactileState
-from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal
+from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal, StopAction, StopGoal
 
 from mujoco_ros_msgs.msg import GeomType, GeomProperties, BodyState, ScalarStamped, StepAction, StepGoal
 from mujoco_ros_msgs.srv import SetGeomProperties, SetBodyState, SetPause, SetGravity, GetGravity
@@ -230,6 +230,10 @@ class TactileObjectPlacementEnv(gym.Env):
         self.grasp_client = actionlib.SimpleActionClient("/franka_gripper/grasp", GraspAction)
         rospy.loginfo("Waiting for GraspAction action server...")
         self.grasp_client.wait_for_server()
+
+        self.stop_client = actionlib.SimpleActionClient("/franka_gripper/grasp", StopAction)
+        rospy.loginfo("Waiting for GraspAction action server...")
+        self.stop_client.wait_for_server()
         rospy.loginfo("Action server started!")
 
       
@@ -246,8 +250,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.005
 
-        self.table_height = 0.17
-        self.max_table_height = 0.17
+        self.min_gapsize = 0.01
+        self.table_height = 0
         self.curriculum = curriculum
         self.max_timesteps = 1000
 
@@ -493,7 +497,7 @@ class TactileObjectPlacementEnv(gym.Env):
             rospy.logerr("Open Action failed!")
         return success
 
-    def _close_gripper(self, width, eps, speed, force):
+    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=20):
         
         self.grasp_client.cancel_all_goals()
         epsilon = GraspEpsilon(inner=eps, outer=eps)
@@ -514,6 +518,7 @@ class TactileObjectPlacementEnv(gym.Env):
         # self.pause_sim(paused=True)
         if not success:
             rospy.logerr("Grasp Action failed!")
+       
         return success
 
     def _setLoad(self, mass, load_inertia): 
@@ -648,9 +653,9 @@ class TactileObjectPlacementEnv(gym.Env):
   
         resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
         if resp:    
-            self.set_object_params()
+            obj_pos, obj_quat = self.set_object_params()
 
-        grasp_success = self._close_gripper(width=self.obj_size_1*2, force=20.0, eps=0.005, speed=0.03)
+        grasp_success = self._close_gripper()
 
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
@@ -663,7 +668,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         if not grasp_success:
             print("Grasp unsuccessful. Retry...")
-        return grasp_success
+        return grasp_success, (obj_pos, obj_quat)
 
     def set_object_params(self, sample=True):
         
@@ -688,6 +693,8 @@ class TactileObjectPlacementEnv(gym.Env):
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
 
+        return obj_pos, obj_quat
+    
     def _new_msg_callback(self, msg):
         topic = msg._connection_header["topic"]
 
@@ -704,6 +711,18 @@ class TactileObjectPlacementEnv(gym.Env):
                 self.last_timestamps[key[0]] = self.current_msg[key[0]].header.stamp # remember timestamp of old message
             self.current_msg[key[0]] = msg
     
+    def _set_table_params(self, tableheight):
+        obj_geom_type = GeomType(value=6)
+        obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=tableheight, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
+        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+        if not resp.success:
+            rospy.logerr("SetGeomProperties:failed to set object parameters")        
+
+        body_state = BodyState(env_id=0, name="table", pose=nparray_to_posestamped(np.array([0.3, 0, tableheight]), np.array([1,0,0,0])), mass=50)
+        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
+        if not resp.success:
+            rospy.logerr("SetBodyState: failed to set object pose or object mass")
+
     def _set_world_to_initial_state(self, options):
         
         self.reset_world()
@@ -742,7 +761,11 @@ class TactileObjectPlacementEnv(gym.Env):
         
         super().reset(seed=seed)
 
+
+        self._open_gripper()
+        self._set_table_params(0.01)
         self.reset_world()
+        
         success = False
         self.max_episode_steps = 1000
         while not success:
@@ -768,32 +791,30 @@ class TactileObjectPlacementEnv(gym.Env):
             twist = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(twist)
             
+            self._open_gripper()
             self.reset_world()
             if not self.continuous:
                 self._perform_sim_steps(10)
 
-            if not options is None:
-                if options['testing'] == False:
-                    self.table_height = np.random.uniform(options['min_table_height'], self.max_table_height)
-                else:
-                    self.table_height = options['min_table_height']
+            success, (obj_pos, obj_quat) = self._initial_grasp()
 
-                obj_geom_type = GeomType(value=6)
-                obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=self.table_height, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
-                resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
-                if not resp.success:
-                    rospy.logerr("SetGeomProperties:failed to set object parameters")        
+        corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
 
-                body_state = BodyState(env_id=0, name="table", pose=nparray_to_posestamped(np.array([0.3, 0, self.table_height]), np.array([1,0,0,0])), mass=50)
-                resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
-                if not resp.success:
-                    rospy.logerr("SetBodyState: failed to set object pose or object mass")
+        lowpoint = np.min(corners[:, -1])
 
-            success = self._initial_grasp()
+        if not options is None:
+            if options['testing'] == False:
+                gap = np.random.uniform(self.min_gapsize, options['gap_size'])
+            else:
+                gap = options['gap_size']
+            
 
+            self.table_height = (lowpoint/2) - gap
+            self._set_table_params(self.table_height)
+            
         self._update_space_limits()
-        observation = self._get_obs() 
-    
+
+        observation = self._get_obs()
         info = {'info' : {'tableheight' : self.table_height}}
 
         return observation, info 
