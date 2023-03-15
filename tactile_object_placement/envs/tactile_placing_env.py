@@ -254,7 +254,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.table_height = 0
         self.curriculum = curriculum
         self.max_timesteps = 1000
-
+        self.angle_range = 0.17
 
         while True:
             self._perform_sim_steps(100)
@@ -306,7 +306,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         position    = transformationEE[:3, -1]
 
-        y_angle = np.random.uniform(low=-np.pi/2, high=np.pi/2)
+
+        y_angle = np.random.uniform(low=-self.angle_range, high=self.angle_range)
 
         quat = tf.transformations.quaternion_from_euler(0,y_angle,0)
 
@@ -808,7 +809,7 @@ class TactileObjectPlacementEnv(gym.Env):
             else:
                 gap = options['gap_size']
             
-
+            self.anglerange = options['angle_range']
             self.table_height = (lowpoint/2) - gap
             self._set_table_params(self.table_height)
             
