@@ -145,8 +145,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.observation_space = Dict({
             "observation" : Dict({
-                "ee_pose" : Box( low=np.array([-np.inf, -np.inf, -np.inf, -np.pi, -np.pi/2, -np.pi]), 
-                                 high=np.array([np.inf, np.inf, np.inf, np.pi, np.pi/2, np.pi]),
+                "ee_pose" : Box( low=np.array([-0.5, -0.5, 0, -np.pi, -np.pi/2, -np.pi]), 
+                                 high=np.array([0.5, 0.5, 0.6, np.pi, np.pi/2, np.pi]),
                                  dtype=np.float64),
                 
                 "joint_positions" : Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]), 
@@ -263,11 +263,11 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self._set_EE_frame_to_gripcenter()
 
-    def _update_space_limits(self):
+    # def _update_space_limits(self):
         
-        self.observation_space["observation"]["ee_pose"] = Box( low=np.array([-np.inf, -np.inf, self.table_height*2 + 0.022, -np.pi, -np.pi/2, -np.pi]), 
-                                                                high=np.array([np.inf, np.inf, 0.5, np.pi, np.pi/2, np.pi]),
-                                                                dtype=np.float64)
+    #     self.observation_space["observation"]["ee_pose"] = Box( low=np.array([-np.inf, -np.inf, self.table_height*2 + 0.022, -np.pi, -np.pi/2, -np.pi]), 
+    #                                                             high=np.array([np.inf, np.inf, 0.5, np.pi, np.pi/2, np.pi]),
+    #                                                             dtype=np.float64)
 
     def _sample_obj_params(self):
         # sample new object/target type
@@ -447,11 +447,11 @@ class TactileObjectPlacementEnv(gym.Env):
 
         pos = np.zeros(3)
         if translate_Z < 0:  
-            if current_pose[2] > self.observation_space["observation"]["ee_pose"].low[2]:      
+            if current_pose[2] > self.table_height*2 + 0.022:      
                 pos[2] += 0.01
         
         elif translate_Z > 0:
-            if current_pose[2] < self.observation_space["observation"]["ee_pose"].high[2]:
+            if current_pose[2] < 0.5:
                 pos[2] -= 0.01
 
         twist_msg = Twist()
@@ -813,8 +813,6 @@ class TactileObjectPlacementEnv(gym.Env):
             self.table_height = (lowpoint/2) - gap
             self._set_table_params(self.table_height)
             
-        self._update_space_limits()
-
         observation = self._get_obs()
         info = {'info' : {'tableheight' : self.table_height}}
 

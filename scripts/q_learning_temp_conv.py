@@ -61,6 +61,9 @@ def stack_to_state(state_stack):
 
     return State(m, ep, jp, jt, jv)
 
+def NormalizeData(data, high, low):
+    return (data - low) / (high - low)
+
 class ReplayMemory(object):
 
     def __init__(self, capacity):
@@ -145,6 +148,16 @@ class DQN_Algo():
 
         self.progress = []
 
+
+    def _normalize_observation(self, obs):
+        
+        normalized = {'observation' : {}}
+        for key in obs['observation']:
+            min_ = self.env.observation_space['observation'][key].high
+            max_ = self.env.observation_space['observation'][key].low
+
+            normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
+        return normalized
     def save_checkpoint(self):
          
         torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Model')
@@ -178,6 +191,7 @@ class DQN_Algo():
     def test(self):
         
         obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : self.angle_range})
+        obs = self._normalize_observation(obs)
 
         done = False
 
@@ -197,7 +211,8 @@ class DQN_Algo():
             action = self.select_action(state)
             
             obs, reward, done, _ , info = self.env.step(action)
-
+            obs = self._normalize_observation(obs)
+            
             reward = torch.tensor([reward])
             if not done:
                 self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
@@ -222,7 +237,8 @@ class DQN_Algo():
         for episode in range(1, self.N_EPOCHS+1):
         
             obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
-        
+            obs = self._normalize_observation(obs)
+
             sampled_height = info['info']['tableheight']
             done = False
 
@@ -241,6 +257,7 @@ class DQN_Algo():
                 action = self.select_action(state)
 
                 obs, reward, done, _ , info = self.env.step(action)
+                obs = self._normalize_observation(obs)
 
                 reward = torch.tensor([reward])
                 if not done:
