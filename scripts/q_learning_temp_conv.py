@@ -120,7 +120,10 @@ class DQN_Algo():
         else:
             self.stepcount = 0
         
-        self.tableheight = 0.17
+
+        #curriculum parameters
+        self.gapsize = 0.005
+        self.angle_range = 0.17
 
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -157,7 +160,7 @@ class DQN_Algo():
 
         with open(self.FILEPATH + '/training_progress.pickle', 'wb') as file:
             
-            self.progress.append((self.stepcount, self.tableheight))
+            self.progress.append((self.stepcount, self.gapsize))
             pickle.dump(self.progress, file)
         
         return 0
@@ -174,7 +177,7 @@ class DQN_Algo():
 
     def test(self):
         
-        obs, info = self.env.reset(options={'min_table_height' : self.tableheight, 'testing' : True})
+        obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : self.angle_range})
 
         done = False
 
@@ -209,7 +212,7 @@ class DQN_Algo():
                 break
         
         print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step)
-        self.rewards_['testing'].append((float(reward), self.stepcount, self.tableheight))
+        self.rewards_['testing'].append((float(reward), self.stepcount, self.gapsize))
         self.ep_lengths_['testing'].append(step)
         
         return reward
@@ -218,7 +221,7 @@ class DQN_Algo():
         
         for episode in range(1, self.N_EPOCHS+1):
         
-            obs, info = self.env.reset(options={'min_table_height' : self.tableheight, 'testing' : False})
+            obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
         
             sampled_height = info['info']['tableheight']
             done = False
@@ -265,9 +268,12 @@ class DQN_Algo():
             if episode % 5 == 0:
                 r = self.test()
                 if r > 0:
-                    self.tableheight -= 0.05
-                    if self.tableheight < 0.01:
-                        self.tableheight = 0.01
+                    self.gapsize += 0.005
+                    self.angle_range += 0.17
+                    if self.angle_range > np.pi/2:
+                        self.angle_range = np.pi/2
+                    if self.gapsize < 0.4:
+                        self.gapsize = 0.4
                         
                 self.save_checkpoint()
 
