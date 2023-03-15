@@ -282,15 +282,16 @@ class DQN_Algo():
             self.rewards_['training'].append((float(reward), self.stepcount, sampled_height))
             self.ep_lengths_['training'].append(step)
             
-            if episode % 5 == 0:
+            if episode % 50 == 0:
                 r = self.test()
-                if r == 1:
-                    self.gapsize += 0.002
+                if r >= 0.95:
                     self.angle_range += 0.05
                     if self.angle_range > np.pi/2:
                         self.angle_range = np.pi/2
-                    if self.gapsize < 0.4:
-                        self.gapsize = 0.4
+                    
+                    self.gapsize += 0.005
+                    if self.gapsize > 0.17:
+                        self.gapsize = 0.17
                         
                 self.save_checkpoint()
 
