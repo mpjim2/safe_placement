@@ -351,10 +351,13 @@ if __name__=='__main__':
     parser.add_argument('--nepochs', required=False, help='int', default='5')
     parser.add_argument('--lr', required=False, help='float', default="1e-4")
     parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
-    #parser.add_argument('--continue_training', required=False, default='0')
+    parser.add_argument('--mem_size', required=False, default='7500')
+    parser.add_argument('--expl_slope', required=False, default='50000')
     opt = parser.parse_args()
 
 
+    expl_slope = int(opt.expl_slope)
+    mem_size = int(opt.mem_size)
     batchsize = int(opt.batchsize)
     nepochs = int(opt.nepochs)
     lr = float(opt.lr)
@@ -399,9 +402,9 @@ if __name__=='__main__':
 
     algo = DQN_Algo(filepath=filepath,
                 lr=lr, 
-                expl_slope=10000, 
+                expl_slope=expl_slope, 
                 discount_factor=0.9, 
-                mem_size=5000, 
+                mem_size=mem_size, 
                 batch_size=batchsize, 
                 n_epochs=nepochs, 
                 tau=0.9,
