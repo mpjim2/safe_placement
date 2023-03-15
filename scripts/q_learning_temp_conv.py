@@ -267,9 +267,9 @@ class DQN_Algo():
             
             if episode % 5 == 0:
                 r = self.test()
-                if r > 0:
-                    self.gapsize += 0.005
-                    self.angle_range += 0.17
+                if r == 1:
+                    self.gapsize += 0.002
+                    self.angle_range += 0.05
                     if self.angle_range > np.pi/2:
                         self.angle_range = np.pi/2
                     if self.gapsize < 0.4:
