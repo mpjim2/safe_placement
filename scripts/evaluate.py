@@ -51,6 +51,9 @@ def obs_to_input(obs, cur_stack, device):
     
     return cur_stack
 
+def NormalizeData(data, high, low):
+    return (data - low) / (high - low)
+
 def stack_to_state(state_stack):
     
     m = torch.cat(list(state_stack.state_myrmex), dim=2) 
@@ -86,7 +89,7 @@ class DQN_Algo():
         if not os.path.exists(self.FILEPATH):
             os.makedirs(self.FILEPATH)
 
-        self.env = gym.make('TactileObjectPlacementEnv-v0')
+        self.env = gym.make('TactileObjectPlacementEnv-v0', sensor='plate', continuous=False)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -100,7 +103,7 @@ class DQN_Algo():
         # self.target_net.load_state_dict(torch.load(self.FILEPATH + '/Model'))
 
 
-        self.tableheight = 0.4
+        self.gapsize = 0.015
 
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -111,6 +114,15 @@ class DQN_Algo():
 
 
 
+    def _normalize_observation(self, obs):
+        
+        normalized = {'observation' : {}}
+        for key in obs['observation']:
+            min_ = self.env.observation_space['observation'][key].high
+            max_ = self.env.observation_space['observation'][key].low
+
+            normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
+        return normalized
     
     def select_action(self, state):
         
@@ -120,8 +132,8 @@ class DQN_Algo():
 
     def test(self):
         
-        obs, info = self.env.reset(options={'min_table_height' : self.tableheight, 'testing' : True})
-
+        obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : 0.17})
+        obs = self._normalize_observation(obs)
         done = False
 
         #ReInitialize cur_state_stack
@@ -135,12 +147,12 @@ class DQN_Algo():
         state = stack_to_state(self.cur_state_stack)
 
         for step in count():
+
             #experience sample: state, action, reward,  state+1
             action = self.select_action(state)
-            
-            print(self.cur_state_stack.state_ep[0])
-            obs, reward, done, _ , info = self.env.step(action)
 
+            obs, reward, done, _ , info = self.env.step(action)
+            obs = self._normalize_observation(obs)
             reward = torch.tensor([reward])
             if not done:
                 self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
@@ -149,7 +161,7 @@ class DQN_Algo():
                 next_state = None
 
             state = next_state
-
+           
             if done:
                 break
 
@@ -159,12 +171,13 @@ class DQN_Algo():
     
 if __name__=='__main__':
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
-    #parser.add_argument('--continue_training', required=False, default='0')
-    opt = parser.parse_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
+    # #parser.add_argument('--continue_training', required=False, default='0')
+    # opt = parser.parse_args()
 
-    filepath = opt.savedir
+
+    filepath = '/home/marco/Data/15-03-2023-19:02/'
     algo = DQN_Algo(filepath=filepath,
                     n_timesteps=10)
 
