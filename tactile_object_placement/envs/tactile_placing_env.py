@@ -35,6 +35,13 @@ def quat_dot(q1, q2):
 def to_msec(stamp):
     return int(stamp.to_nsec()*1e-6)
     
+def quaternion_to_euler(q):
+    qw, qx, qy, qz = q
+    roll = math.atan2(2*(qw*qx + qy*qz), 1 - 2*(qx*qx + qy*qy))
+    pitch = math.asin(2*(qw*qy - qx*qz))
+    yaw = math.atan2(2*(qw*qz + qx*qy), 1 - 2*(qy*qy + qz*qz))
+    return np.array([roll, pitch, yaw])
+
 def nparray_to_posestamped(np_pos, np_quat, frame_id="world"):
     pose = PoseStamped()
     pose.header.stamp = rospy.Time.now()
@@ -145,8 +152,8 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.observation_space = Dict({
             "observation" : Dict({
-                "ee_pose" : Box( low=np.array([-0.5, -0.5, 0, -np.pi, -np.pi/2, -np.pi]), 
-                                 high=np.array([0.5, 0.5, 0.6, np.pi, np.pi/2, np.pi]),
+                "ee_pose" : Box( low=np.array([-0.5, -0.5, 0, -1, -1, -1, -1]), 
+                                 high=np.array([0.5, 0.5, 0.6, 1, 1, 1, 1]),
                                  dtype=np.float64),
                 
                 "joint_positions" : Box(low=np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]), 
@@ -383,7 +390,8 @@ class TactileObjectPlacementEnv(gym.Env):
         current_obs = self.current_msg['franka_state']
         
         ee_pos, ee_quat, ee_xyz = self._pose_quat_from_trafo(current_obs.O_T_EE)
-        pose = np.array((ee_pos, ee_xyz)).reshape(6)
+        
+        pose = np.concatenate([ee_pos, ee_quat])
 
         # ee_obj_dist = np.linalg.norm(ee_pos - obj_pos)
 
@@ -426,17 +434,29 @@ class TactileObjectPlacementEnv(gym.Env):
         current_pose, _ = self._get_obs(return_quat=True)
         current_pose = current_pose["observation"]["ee_pose"]
 
-        # quat = deepcopy(quat_init)
+        cur_quat = current_pose[-4:]
 
-        if rotate_X > 0 and current_pose[4] < self.observation_space["observation"]["ee_pose"].high[4]:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.5)
-        elif rotate_X < 0 and current_pose[4] > self.observation_space["observation"]["ee_pose"].low[4]:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.5)
+        dot = quat_dot(cur_quat, np.array([0,0,0,1]))
+        angle = 2.0 * math.acos(min(abs(dot), 1.0))
         
-        if rotate_Y > 0  and current_pose[2] > self.observation_space["observation"]["ee_pose"].low[2]:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.5)
-        elif rotate_Y < 0 and current_pose[2] < self.observation_space["observation"]["ee_pose"].high[2]:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.5)
+        
+        euler_init = quaternion_to_euler(np.array([0,0,0,1]))
+        euler_cur  = quaternion_to_euler(cur_quat)        
+
+        euler_diff = abs(euler_init - euler_cur)
+        
+        if abs(angle) < math.pi/2:
+        # if euler_diff[0] < math.pi/4:
+            if rotate_X > 0:
+                quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.5)
+            elif rotate_X < 0:
+                quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.5)
+        
+        # if euler_diff[1] < math.pi/2:
+            if rotate_Y > 0:
+                quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.5)
+            elif rotate_Y < 0:
+                quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.5)
         
         # if quat_dot(quat_init, quat) < 0:
         # quat *= -1
@@ -813,7 +833,8 @@ class TactileObjectPlacementEnv(gym.Env):
             self.table_height = (lowpoint/2) - gap
             self._set_table_params(self.table_height)
             
-        observation = self._get_obs()
+        observation    = self._get_obs()
+
         info = {'info' : {'tableheight' : self.table_height}}
 
         return observation, info 
