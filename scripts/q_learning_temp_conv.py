@@ -44,7 +44,7 @@ def obs_to_input(obs, cur_stack, device):
                                              torch.from_numpy(obs['myrmex_l']).view(1, 1, 1,16,16)], 
                                              dim=1).to(device)) #.type(torch.DoubleTensor)
     
-    cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 6).to(device))                      #.type(torch.DoubleTensor)
+    cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 7).to(device))                      #.type(torch.DoubleTensor)
     cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).view(1, 1, 1, 7).to(device))              #.type(torch.DoubleTensor)
     cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).view(1, 1, 1, 7).to(device))                #.type(torch.DoubleTensor)
     cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).view(1, 1, 1, 7).to(device))             #.type(torch.DoubleTensor)
@@ -130,7 +130,7 @@ class DQN_Algo():
 
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
@@ -178,14 +178,13 @@ class DQN_Algo():
         
         return 0
     
-    def select_action(self, state):
+    def select_action(self, state, explore=True):
         
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)
-        if random.random() >= eps_threshold:
-            action = self.policy_net(*state).max(1)[1].view(1,1)
-        else:
+        if random.random() < eps_threshold and explore:
             action = torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
-        
+        else:
+            action = self.policy_net(*state).max(1)[1].view(1,1)
         return action
 
     def test(self):
@@ -197,7 +196,7 @@ class DQN_Algo():
 
         #ReInitialize cur_state_stack
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,2,1, 16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
@@ -208,7 +207,7 @@ class DQN_Algo():
         for step in count():
             #experience sample: state, action, reward,  state+1
             
-            action = self.select_action(state)
+            action = self.select_action(state, explore=False)
             
             obs, reward, done, _ , info = self.env.step(action)
             obs = self._normalize_observation(obs)
@@ -244,7 +243,7 @@ class DQN_Algo():
 
             #ReInitialize cur_state_stack
             self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,2,1, 16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_ep=deque([torch.zeros((1, 1, 1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                         state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                          state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                          state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                          state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))

@@ -62,7 +62,7 @@ class MAT_based_net(nn.Module):
         )
 
         self.pose_embedding = torch.nn.Sequential(
-            torch.nn.Linear(6*n_timesteps, 128),
+            torch.nn.Linear(7*n_timesteps, 128),
             torch.nn.ReLU(),
             torch.nn.Linear(128, 128),
             torch.nn.ReLU(),
