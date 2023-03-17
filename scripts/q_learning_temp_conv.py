@@ -5,6 +5,7 @@ import torchvision.transforms as transforms
 import torchvision
 from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 import DQN
 import sys
@@ -96,6 +97,7 @@ class DQN_Algo():
         #Policy and target network initilisation
         self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
         self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.replay_buffer = ReplayMemory(mem_size)
 
@@ -109,7 +111,7 @@ class DQN_Algo():
 
         self.LEARNING_RATE = lr
 
-        self.loss_fn = nn.SmoothL1Loss()
+        self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.AdamW(self.policy_net.parameters(), lr=self.LEARNING_RATE, amsgrad=True)
 
         self.soft_update_weight = tau
@@ -137,17 +139,9 @@ class DQN_Algo():
 
 
         #contains rewards & length of episode for every episode
-        self.rewards_ = {'training' : [], 
-                         'testing'  : [] }
+     
 
-        self.ep_lengths_ = {'training' : [],
-                            'testing'  : []}
-
-        self.done_causes = {'training' : [],
-                           'testing'  : []}
-
-        self.progress = []
-
+        self.summary_writer = SummaryWriter(self.FILEPATH + '/runs')
 
     def _normalize_observation(self, obs):
         
@@ -158,23 +152,24 @@ class DQN_Algo():
 
             normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
         return normalized
+    
     def save_checkpoint(self):
          
         torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Model')
        
-        with open(self.FILEPATH + '/Rewards.pickle', 'wb') as file:
-            pickle.dump(self.rewards_, file)
+        # with open(self.FILEPATH + '/Rewards.pickle', 'wb') as file:
+        #     pickle.dump(self.rewards_, file)
         
-        with open(self.FILEPATH + '/Ep_length.pickle', 'wb') as file:
-            pickle.dump(self.ep_lengths_, file)
+        # with open(self.FILEPATH + '/Ep_length.pickle', 'wb') as file:
+        #     pickle.dump(self.ep_lengths_, file)
         
-        with open(self.FILEPATH + '/done_causes.pickle', 'wb') as file:
-            pickle.dump(self.done_causes, file)
+        # with open(self.FILEPATH + '/done_causes.pickle', 'wb') as file:
+        #     pickle.dump(self.done_causes, file)
 
-        with open(self.FILEPATH + '/training_progress.pickle', 'wb') as file:
+        # with open(self.FILEPATH + '/training_progress.pickle', 'wb') as file:
             
-            self.progress.append((self.stepcount, self.gapsize))
-            pickle.dump(self.progress, file)
+        #     self.progress.append((self.stepcount, self.gapsize))
+        #     pickle.dump(self.progress, file)
         
         return 0
     
@@ -222,12 +217,12 @@ class DQN_Algo():
             state = next_state
 
             if done:
-                self.done_causes['testing'].append(info['cause'])
                 break
         
-        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step)
-        self.rewards_['testing'].append((float(reward), self.stepcount, self.gapsize))
-        self.ep_lengths_['testing'].append(step)
+        self.summary_writer.add_scalar('Reward/test', reward, self.stepcount)
+        self.summary_writer.add_scalar('Ep_length/test', step+1, self.stepcount)
+
+        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step+1)
         
         return reward
 
@@ -273,13 +268,12 @@ class DQN_Algo():
                 self.stepcount += 1
 
                 if done:
-                    self.done_causes['training'].append(info['cause'])
                     break
             
-            print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ', (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
+            print('Episode ', episode, ' done after ', step+1,  ' Steps ! reward: ', float(reward))
             
-            self.rewards_['training'].append((float(reward), self.stepcount, sampled_height))
-            self.ep_lengths_['training'].append(step)
+            self.summary_writer.add_scalar('Reward/train', reward, self.stepcount)
+            self.summary_writer.add_scalar('Ep_length/train', step+1, self.stepcount)
             
             if episode % 50 == 0:
                 r = self.test()
@@ -313,8 +307,10 @@ class DQN_Algo():
                                     batch.next_state)), device=self.device, dtype=torch.bool)
 
         
-        state_action_values = self.policy_net(*(torch.cat(e) for e in state_batch)).gather(1, action_batch)
-
+        vals = self.policy_net(*(torch.cat(e) for e in state_batch))
+        state_action_values = vals.gather(1, action_batch)
+        
+        
         #2. Compute Target Q-Values
         next_state_values = torch.zeros(action_batch.size()[0], device=self.device, dtype=torch.double)
         if any(non_final_mask):
@@ -325,6 +321,14 @@ class DQN_Algo():
         expected_state_action_values = (next_state_values * self.discount_factor) + reward_batch
 
         loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        mean_Q_Vals = torch.mean(vals, dim=0)
+        mean_sav = torch.mean(state_action_values, )
+        self.summary_writer.add_scalar('Loss/train', loss, self.stepcount)
+
+        for i, q in enumerate(mean_Q_Vals):
+            label = 'Q_values/policy/action_' + str(i)
+            self.summary_writer.add_scalar(label, q, self.stepcount)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -410,3 +414,4 @@ if __name__=='__main__':
                 n_timesteps=10)
 
     algo.train()    
+    algo.summary_writer.close()
