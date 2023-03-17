@@ -4,6 +4,7 @@ import os
 import numpy as np 
 from scipy.spatial.transform import Rotation as R
 import pyquaternion as pq
+import copy
 
 import gym
 from gym.spaces import Box, Discrete, Dict
@@ -131,9 +132,10 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.DISCRETE_ACTIONS = []
 
-        for x in [-1, 0, 1]:
-            for z in [1, 0, -1]:
-                self.DISCRETE_ACTIONS.append([z,x,0,0])
+        for x in [-1, 1]:
+            self.DISCRETE_ACTIONS.append([0,x,0,0])
+        for z in [1, -1]:
+            self.DISCRETE_ACTIONS.append([z,0,0,0])
 
         self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
 
@@ -257,6 +259,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.sensor_thickness = 0.005
 
+        self.init_quat = None
         self.min_gapsize = 0.01
         self.table_height = 0
         self.curriculum = curriculum
@@ -433,30 +436,32 @@ class TactileObjectPlacementEnv(gym.Env):
 
         current_pose, _ = self._get_obs(return_quat=True)
         current_pose = current_pose["observation"]["ee_pose"]
+        # cur_quat = current_pose[-4:]
+        # if self.init_quat is None:
+        #     self.init_quat = copy.deepcopy(cur_quat)
+        
 
-        cur_quat = current_pose[-4:]
-
-        dot = quat_dot(cur_quat, np.array([0,0,0,1]))
-        angle = 2.0 * math.acos(min(abs(dot), 1.0))
+        # dot = quat_dot(cur_quat, self.init_quat)
+        # angle = 2.0 * math.acos(min(abs(dot), 1.0))
         
         
-        euler_init = quaternion_to_euler(np.array([0,0,0,1]))
-        euler_cur  = quaternion_to_euler(cur_quat)        
+        # euler_init = quaternion_to_euler(np.array([0,0,0,1]))
+        # euler_cur  = quaternion_to_euler(cur_quat)        
 
-        euler_diff = abs(euler_init - euler_cur)
+        # euler_diff = abs(euler_init - euler_cur)
         
-        if abs(angle) < math.pi/2:
+        # if (math.pi/2 - abs(angle)) > 0.1:
         # if euler_diff[0] < math.pi/4:
-            if rotate_X > 0:
-                quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.5)
-            elif rotate_X < 0:
-                quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.5)
-        
-        # if euler_diff[1] < math.pi/2:
-            if rotate_Y > 0:
-                quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.5)
-            elif rotate_Y < 0:
-                quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.5)
+        if rotate_X > 0:
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.1)
+        elif rotate_X < 0:
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.1)
+    
+    # if euler_diff[1] < math.pi/2:
+        if rotate_Y > 0:
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.1)
+        elif rotate_Y < 0:
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.1)
         
         # if quat_dot(quat_init, quat) < 0:
         # quat *= -1
@@ -468,11 +473,11 @@ class TactileObjectPlacementEnv(gym.Env):
         pos = np.zeros(3)
         if translate_Z < 0:  
             if current_pose[2] > self.table_height*2 + 0.022:      
-                pos[2] += 0.01
+                pos[2] += 0.005
         
         elif translate_Z > 0:
             if current_pose[2] < 0.5:
-                pos[2] -= 0.01
+                pos[2] -= 0.005
 
         twist_msg = Twist()
 
@@ -608,8 +613,7 @@ class TactileObjectPlacementEnv(gym.Env):
         done = False
 
         action = self.DISCRETE_ACTIONS[action]
-       
-       
+
         #[0, 1, 2, 3]
         #0 not terminated
         #1 opened gripper
@@ -653,7 +657,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
             self.twist_pub.publish(twist)
             
-            self._perform_sim_steps(np.random.randint(10, 50))
+            self._perform_sim_steps(10)
 
             observation = self._get_obs()
 
