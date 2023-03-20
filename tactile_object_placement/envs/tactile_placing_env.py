@@ -137,6 +137,10 @@ class TactileObjectPlacementEnv(gym.Env):
         for z in [1, -1]:
             self.DISCRETE_ACTIONS.append([z,0,0,0])
 
+        # for x in [-1, 0, 1]:
+        #     for z in [-1, 0, 1]:
+        #         self.DISCRETE_ACTIONS.append([z,x,0,0])
+                
         self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
 
         self.action_space = Discrete(len(self.DISCRETE_ACTIONS))
@@ -173,10 +177,10 @@ class TactileObjectPlacementEnv(gym.Env):
 
                 "myrmex_l" : tactile_obs,
                 
-                "myrmex_r" : tactile_obs,
+                "myrmex_r" : tactile_obs
 
 
-                "time_diff": Box(low=0, high=np.inf, shape=(len(self.current_msg),), dtype=np.int64)
+                # "time_diff": Box(low=0, high=np.inf, shape=(len(self.current_msg),), dtype=np.int64)
             })
         })
 
@@ -348,7 +352,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         position -= (obj_axis * ax_shift)
 
-        return position, quat
+        return position, quat, y_angle
 
     def _pose_quat_from_trafo(self, transformationEE):
         
@@ -409,11 +413,11 @@ class TactileObjectPlacementEnv(gym.Env):
         myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values)/self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
         myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
-        try:
-            time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
-        except:
-            time_diff = np.zeros(len(self.current_msg.keys()))
-            print("ERROR: could not compute time diff!")
+        # try:
+        #     time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
+        # except:
+        #     time_diff = np.zeros(len(self.current_msg.keys()))
+        #     print("ERROR: could not compute time diff!")
 
         observation = {
                        "ee_pose" : pose, 
@@ -421,8 +425,8 @@ class TactileObjectPlacementEnv(gym.Env):
                        "joint_torques" : joint_torques,
                        "joint_velocities" : joint_velocities,
                        "myrmex_l" : myrmex_data_l,
-                       "myrmex_r" : myrmex_data_r,
-                       "time_diff" : time_diff
+                       "myrmex_r" : myrmex_data_r
+                    #    "time_diff" : time_diff
                        }
 
         if not return_quat:
@@ -473,11 +477,11 @@ class TactileObjectPlacementEnv(gym.Env):
         pos = np.zeros(3)
         if translate_Z < 0:  
             if current_pose[2] > self.table_height*2 + 0.022:      
-                pos[2] += 0.005
+                pos[2] += 0.01
         
         elif translate_Z > 0:
             if current_pose[2] < 0.5:
-                pos[2] -= 0.005
+                pos[2] -= 0.01
 
         twist_msg = Twist()
 
@@ -594,7 +598,7 @@ class TactileObjectPlacementEnv(gym.Env):
             reward = np.dot(np.array([0, 0, 1]), z_axis)
 
         else:
-            reward = -1 
+            reward = -0.1 
         
         return reward    
     
@@ -643,7 +647,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
             else:
 
-                reward = -0.5
+                reward = -0.1
                 info['cause'] = 2
             done = True
         
@@ -664,7 +668,7 @@ class TactileObjectPlacementEnv(gym.Env):
             if self._check_object_grip() == False:
 
                 done = True
-                reward = -0.5
+                reward = -0.1
                 info['cause'] = 3
         
         return observation, reward, done, False, info
@@ -678,7 +682,7 @@ class TactileObjectPlacementEnv(gym.Env):
   
         resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
         if resp:    
-            obj_pos, obj_quat = self.set_object_params()
+            obj_pos, obj_quat, angle = self.set_object_params()
 
         grasp_success = self._close_gripper()
 
@@ -693,7 +697,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         if not grasp_success:
             print("Grasp unsuccessful. Retry...")
-        return grasp_success, (obj_pos, obj_quat)
+        return grasp_success, (obj_pos, obj_quat, angle)
 
     def set_object_params(self, sample=True):
         
@@ -702,7 +706,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
 
         # sample object start pose
-        obj_pos, obj_quat = self._sample_object_pose()
+        obj_pos, obj_quat, angle = self._sample_object_pose()
 
   
         # set object properties
@@ -718,7 +722,7 @@ class TactileObjectPlacementEnv(gym.Env):
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
 
-        return obj_pos, obj_quat
+        return obj_pos, obj_quat, angle
     
     def _new_msg_callback(self, msg):
         topic = msg._connection_header["topic"]
@@ -789,8 +793,17 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self._open_gripper()
         self._set_table_params(0.01)
-        self.reset_world()
         
+        if not options is None:
+            if options['testing'] == False:
+                gap = np.random.uniform(self.min_gapsize, options['gap_size'])
+            else:
+                gap = options['gap_size']
+            
+            self.anglerange = options['angle_range']
+            
+        self.reset_world()    
+
         success = False
         self.max_episode_steps = 1000
         while not success:
@@ -821,25 +834,19 @@ class TactileObjectPlacementEnv(gym.Env):
             if not self.continuous:
                 self._perform_sim_steps(10)
 
-            success, (obj_pos, obj_quat) = self._initial_grasp()
+            success, (obj_pos, obj_quat, angle) = self._initial_grasp()
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
 
         lowpoint = np.min(corners[:, -1])
 
-        if not options is None:
-            if options['testing'] == False:
-                gap = np.random.uniform(self.min_gapsize, options['gap_size'])
-            else:
-                gap = options['gap_size']
-            
-            self.anglerange = options['angle_range']
-            self.table_height = (lowpoint/2) - gap
-            self._set_table_params(self.table_height)
+        self.table_height = (lowpoint/2) - gap
+
+        self._set_table_params(self.table_height)
             
         observation    = self._get_obs()
 
-        info = {'info' : {'tableheight' : self.table_height}}
+        info = {'info' : {'sampled_gap' : gap, 'obj_angle' : angle}}
 
         return observation, info 
     
