@@ -75,9 +75,14 @@ class ReplayMemory(object):
         self.memory.append(Transition(*args))
 
     def sample(self, batch_size):
-        if batch_size > len(self.memory):
+        
+        if batch_size >= len(self.memory):
             batch_size = len(self.memory)   
-        return random.sample(self.memory, batch_size)
+            return random.sample(self.memory, batch_size)
+        else: 
+            return random.sample(self.memory, batch_size-1) + [self.memory[-1]]
+
+        
 
     def __len__(self):
         return len(self.memory)
@@ -127,7 +132,7 @@ class DQN_Algo():
         
 
         #curriculum parameters
-        self.gapsize = 0.005
+        self.gapsize = 0.01
         self.angle_range = 0.17
 
         self.n_timesteps = n_timesteps
@@ -143,14 +148,27 @@ class DQN_Algo():
 
         self.summary_writer = SummaryWriter(self.FILEPATH + '/runs')
 
+        self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
+        self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
+        
     def _normalize_observation(self, obs):
         
         normalized = {'observation' : {}}
         for key in obs['observation']:
+            
             min_ = self.env.observation_space['observation'][key].high
             max_ = self.env.observation_space['observation'][key].low
+            
+            if key == 'ee_pose':
+                min_ = min_[:3]
+                max_ = max_[:3]
 
-            normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
+                pos  = NormalizeData(obs['observation'][key][:3], min_, max_)
+                quat = obs['observation'][key][3:] 
+
+                normalized['observation'][key] = np.concatenate([pos, quat])
+            else:
+                normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
         return normalized
     
     def save_checkpoint(self):
@@ -175,7 +193,10 @@ class DQN_Algo():
     
     def select_action(self, state, explore=True):
         
+
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)
+        self.summary_writer.add_scalar('exploration/rate', eps_threshold, self.stepcount)
+        
         if random.random() < eps_threshold and explore:
             action = torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
         else:
@@ -233,9 +254,11 @@ class DQN_Algo():
             obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
             obs = self._normalize_observation(obs)
 
-            sampled_height = info['info']['tableheight']
             done = False
 
+            self.summary_writer.add_scalar('curriculum/sampled_gap', info['info']['sampled_gap'], self.stepcount)
+            self.summary_writer.add_scalar('curriculum/sampled_angle', info['info']['obj_angle'], self.stepcount)
+            
             #ReInitialize cur_state_stack
             self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,2,1, 16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                          state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -282,10 +305,12 @@ class DQN_Algo():
                     if self.angle_range > np.pi/2:
                         self.angle_range = np.pi/2
                     
-                    self.gapsize += 0.005
+                    self.gapsize += 0.01
                     if self.gapsize > 0.17:
                         self.gapsize = 0.17
-                        
+
+                    self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
+                    self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
                 self.save_checkpoint()
 
 
