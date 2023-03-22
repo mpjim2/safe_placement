@@ -19,16 +19,18 @@ if __name__=="__main__":
     # env.reset()
     # env.reset(options={'min_table_height' : 0.1, 'testing' :True})
     case_found = False
-    while not case_found:
-        env.reset(options={'min_table_height' : 0.35, 'testing' :True})
-        for _ in range(1):
-            action = env.action_space.sample()
-            _, r, _, _, _ = env.step(action)
+    n = env.action_space.n
+    for action in range(1):
+        env.reset(options={'gap_size' : 0.002, 'angle_range' : 0.17,'testing' :True})
+        done = False
+        time.sleep(3)
+        # while not done:
+        #     _, r, done, _, _ = env.step(action)
             
-            if r == -0.5:
-                case_found = True
-                time.sleep(10)
-        # if done: break
+        #     if r == -0.5:
+        #         case_found = True
+        #         time.sleep(10)
+        # # if done: break
     # env.reset()
         
 # time.sleep(30)
