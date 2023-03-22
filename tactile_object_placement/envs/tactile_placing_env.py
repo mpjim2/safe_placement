@@ -264,7 +264,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.sensor_thickness = 0.005
 
         self.init_quat = None
-        self.min_gapsize = 0.01
+        self.min_gapsize = 0.002
         self.table_height = 0
         self.curriculum = curriculum
         self.max_timesteps = 1000
@@ -310,7 +310,7 @@ class TactileObjectPlacementEnv(gym.Env):
             self.obj_size_2 = 0
             self.obj_height = self.obj_size_1
 
-    def _sample_object_pose(self):
+    def _sample_object_pose(self, testing=False):
 
         transformationEE = self.current_msg['franka_state'].O_T_EE
         transformationEE = np.array(transformationEE).reshape((4,4), order='F')
@@ -320,8 +320,10 @@ class TactileObjectPlacementEnv(gym.Env):
 
         position    = transformationEE[:3, -1]
 
-
-        y_angle = np.random.uniform(low=-self.angle_range, high=self.angle_range)
+        if testing:
+            y_angle = np.random.choice([-self.angle_range, self.angle_range])
+        else:
+            y_angle = np.random.uniform(low=-self.angle_range, high=self.angle_range)
 
         quat = tf.transformations.quaternion_from_euler(0,y_angle,0)
 
@@ -476,12 +478,12 @@ class TactileObjectPlacementEnv(gym.Env):
 
         pos = np.zeros(3)
         if translate_Z < 0:  
-            if current_pose[2] > self.table_height*2 + 0.022:      
-                pos[2] += 0.01
+            # if current_pose[2] > self.table_height*2 + 0.022:      
+            pos[2] += 0.1
         
         elif translate_Z > 0:
             if current_pose[2] < 0.5:
-                pos[2] -= 0.01
+                pos[2] -= 0.1
 
         twist_msg = Twist()
 
@@ -588,7 +590,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
 
-        if np.min(corners[:, -1]) <= 0.0075 + self.table_height*2:
+        if np.min(corners[:, -1]) <= 0.0006 + self.table_height*2:
             quat = pq.Quaternion(quat)
             z_axis = rotate_vec(np.array([0, 0, 1]), quat)
                     
@@ -673,7 +675,7 @@ class TactileObjectPlacementEnv(gym.Env):
         
         return observation, reward, done, False, info
 
-    def _initial_grasp(self):
+    def _initial_grasp(self, testing=False):
         
         open = False
         while not open:
@@ -682,7 +684,7 @@ class TactileObjectPlacementEnv(gym.Env):
   
         resp = self.set_gravity(env_id=0, gravity=[0, 0, 0])
         if resp:    
-            obj_pos, obj_quat, angle = self.set_object_params()
+            obj_pos, obj_quat, angle = self.set_object_params(testing=testing)
 
         grasp_success = self._close_gripper()
 
@@ -699,14 +701,14 @@ class TactileObjectPlacementEnv(gym.Env):
             print("Grasp unsuccessful. Retry...")
         return grasp_success, (obj_pos, obj_quat, angle)
 
-    def set_object_params(self, sample=True):
+    def set_object_params(self, testing=False):
         
         # sample object type, mass, sliding friction, height, radius, length, width
         self._sample_obj_params() 
 
 
         # sample object start pose
-        obj_pos, obj_quat, angle = self._sample_object_pose()
+        obj_pos, obj_quat, angle = self._sample_object_pose(testing=testing)
 
   
         # set object properties
@@ -796,7 +798,11 @@ class TactileObjectPlacementEnv(gym.Env):
         
         if not options is None:
             if options['testing'] == False:
-                gap = np.random.uniform(self.min_gapsize, options['gap_size'])
+                gap = np.random.normal(loc=options['gap_size'], scale=0.002)
+                if gap < self.min_gapsize:
+                    gap = self.min_gapsize
+                # gap = np.random.uniform(self.min_gapsize, options['gap_size'])
+
             else:
                 gap = options['gap_size']
             
@@ -834,7 +840,7 @@ class TactileObjectPlacementEnv(gym.Env):
             if not self.continuous:
                 self._perform_sim_steps(10)
 
-            success, (obj_pos, obj_quat, angle) = self._initial_grasp()
+            success, (obj_pos, obj_quat, angle) = self._initial_grasp(testing=options['testing'])
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
 
