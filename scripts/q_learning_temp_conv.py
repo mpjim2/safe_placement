@@ -132,8 +132,9 @@ class DQN_Algo():
         
 
         #curriculum parameters
-        self.gapsize = 0.01
+        self.gapsize = 0.002
         self.angle_range = 0.17
+        self.speed_curriculum = [0.1, 0.01]
 
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -203,9 +204,20 @@ class DQN_Algo():
             action = self.policy_net(*state).max(1)[1].view(1,1)
         return action
 
-    def test(self):
+    def test(self, mode='max_gap'):
         
-        obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : self.angle_range})
+        if mode == 'max_gap':
+            obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : 0})
+        
+        elif mode == 'max_angle':
+            g = self.gapsize - 0.002
+            if g < 0.002:
+                g = 0.002
+            obs, info = self.env.reset(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range})
+        
+        elif mode == 'random':
+            obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
+
         obs = self._normalize_observation(obs)
 
         done = False
@@ -239,13 +251,10 @@ class DQN_Algo():
 
             if done:
                 break
-        
-        self.summary_writer.add_scalar('Reward/test', reward, self.stepcount)
-        self.summary_writer.add_scalar('Ep_length/test', step+1, self.stepcount)
 
-        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step+1)
+        print('Finished ' , mode, ' Evaluation! Reward: ', float(reward), " Steps until Done: ", step+1)
         
-        return reward
+        return reward, step+1
 
     def train(self):
         
@@ -256,8 +265,8 @@ class DQN_Algo():
 
             done = False
 
-            self.summary_writer.add_scalar('curriculum/sampled_gap', info['info']['sampled_gap'], self.stepcount)
-            self.summary_writer.add_scalar('curriculum/sampled_angle', info['info']['obj_angle'], self.stepcount)
+            self.summary_writer.add_scalar('curriculum/sampled_gap', info['info']['sampled_gap'], episode)
+            self.summary_writer.add_scalar('curriculum/sampled_angle', info['info']['obj_angle'], episode)
             
             #ReInitialize cur_state_stack
             self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,2,1, 16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -295,22 +304,35 @@ class DQN_Algo():
             
             print('Episode ', episode, ' done after ', step+1,  ' Steps ! reward: ', float(reward))
             
-            self.summary_writer.add_scalar('Reward/train', reward, self.stepcount)
-            self.summary_writer.add_scalar('Ep_length/train', step+1, self.stepcount)
+            self.summary_writer.add_scalar('Reward/train', reward, episode)
+            self.summary_writer.add_scalar('Ep_length/train', step+1, episode)
             
-            if episode % 50 == 0:
-                r = self.test()
-                if r >= 0.95:
+            if episode % 100 == 0:
+                
+                R = []
+                #3 Test episodes 
+                for mode in ['max_gap', 'max_angle', 'random']:
+                    r, s = self.test(mode)
+                    print(mode, r, s)
+                    R.append(r)
+                    self.summary_writer.add_scalar('Reward/test/' + mode, r, episode)
+                    self.summary_writer.add_scalar('Ep_length/test/' +mode , s, episode)
+                
+                #Gap is closed as soon reward is positive
+                if R[0] >= 0.5:   
+                    self.gapsize += 0.002
+                    if self.gapsize > 0.17:
+                        self.gapsize = 0.17
+
+                    self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, episode)
+                #only increase angle difficulty if the reward is high enough
+                if R[1] >= 0.98:
                     self.angle_range += 0.05
                     if self.angle_range > np.pi/2:
                         self.angle_range = np.pi/2
                     
-                    self.gapsize += 0.01
-                    if self.gapsize > 0.17:
-                        self.gapsize = 0.17
-
-                    self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
-                    self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
+                    self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, episode)
+                
                 self.save_checkpoint()
 
 
