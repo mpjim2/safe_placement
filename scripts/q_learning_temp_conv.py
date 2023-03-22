@@ -39,21 +39,12 @@ Transition = namedtuple('Transition',
                          'next_state',
                          'reward'))
 
-def obs_to_input(obs, cur_stack, device):
 
-    cur_stack.state_myrmex.append(torch.cat([torch.from_numpy(obs['myrmex_r']).view(1, 1, 1,16,16),
-                                             torch.from_numpy(obs['myrmex_l']).view(1, 1, 1,16,16)], 
-                                             dim=1).to(device)) #.type(torch.DoubleTensor)
-    
-    cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 7).to(device))                      #.type(torch.DoubleTensor)
-    cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).view(1, 1, 1, 7).to(device))              #.type(torch.DoubleTensor)
-    cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).view(1, 1, 1, 7).to(device))                #.type(torch.DoubleTensor)
-    cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).view(1, 1, 1, 7).to(device))             #.type(torch.DoubleTensor)
-    
-    return cur_stack
 
 def stack_to_state(state_stack):
     
+    # for x in list(state_stack.state_myrmex):
+    #     print(x.size())
     m = torch.cat(list(state_stack.state_myrmex), dim=2) 
     ep = torch.cat(list(state_stack.state_ep), dim=2)
     jp = torch.cat(list(state_stack.state_jp), dim=2)
@@ -87,21 +78,32 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
+def fingertip_hack(reading):
+
+    ret = []
+    s = 0
+    for x in [4,4,4,4,2,2,2,2,2,2,2,2]:
+        taxel = np.max(reading[s:s+x])
+        s+=x
+        ret.append(taxel)
+    return np.array(ret)
+
 class DQN_Algo():
 
-    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, global_step=None):
+    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, sensor="plate", global_step=None):
 
+        self.sensor = sensor
         self.FILEPATH = filepath 
         if not os.path.exists(self.FILEPATH):
             os.makedirs(self.FILEPATH)
 
-        self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor="plate")
+        self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor=sensor)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         #Policy and target network initilisation
-        self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
-        self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
+        self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+        self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.replay_buffer = ReplayMemory(mem_size)
@@ -136,8 +138,14 @@ class DQN_Algo():
         self.angle_range = 0.17
         self.speed_curriculum = [0.1, 0.01]
 
+
+        if sensor == "fingertip":
+            self.tactile_shape = (1,2,1,12)
+        elif sensor == "plate":
+            self.tactile_shape = (1,2,1,16,16)
+        
         self.n_timesteps = n_timesteps
-        self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,1,2,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+        self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
@@ -151,7 +159,28 @@ class DQN_Algo():
 
         self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
         self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
+    
+
+    def obs_to_input(self, obs, cur_stack, device):
+
+        if self.sensor == 'plate':
+            cur_stack.state_myrmex.append(torch.cat([torch.from_numpy(obs['myrmex_r']).view(1, 1, 1,16,16),
+                                                    torch.from_numpy(obs['myrmex_l']).view(1, 1, 1,16,16)], 
+                                                    dim=1).to(device)) #.type(torch.DoubleTensor)
+        elif self.sensor == 'fingertip':
+            right = fingertip_hack(obs['myrmex_r'])
+            left  = fingertip_hack(obs['myrmex_l'])
+            cur_stack.state_myrmex.append(torch.cat([torch.from_numpy(right).view(1, 1, 1, 12),
+                                                     torch.from_numpy(left).view(1, 1, 1, 12)], 
+                                                     dim=1).to(device)) #.type(torch.DoubleTensor)
         
+        cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 7).to(device))                      #.type(torch.DoubleTensor)
+        cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).view(1, 1, 1, 7).to(device))              #.type(torch.DoubleTensor)
+        cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).view(1, 1, 1, 7).to(device))                #.type(torch.DoubleTensor)
+        cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).view(1, 1, 1, 7).to(device))             #.type(torch.DoubleTensor)
+    
+        return cur_stack
+
     def _normalize_observation(self, obs):
         
         normalized = {'observation' : {}}
@@ -194,7 +223,6 @@ class DQN_Algo():
     
     def select_action(self, state, explore=True):
         
-
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)
         self.summary_writer.add_scalar('exploration/rate', eps_threshold, self.stepcount)
         
@@ -223,13 +251,13 @@ class DQN_Algo():
         done = False
 
         #ReInitialize cur_state_stack
-        self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,2,1, 16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+        self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
                                      state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
-        self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
+        self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
         state = stack_to_state(self.cur_state_stack)
 
         for step in count():
@@ -242,7 +270,7 @@ class DQN_Algo():
             
             reward = torch.tensor([reward])
             if not done:
-                self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
+                self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
                 next_state = stack_to_state(self.cur_state_stack)
             else:
                 next_state = None
@@ -269,13 +297,13 @@ class DQN_Algo():
             self.summary_writer.add_scalar('curriculum/sampled_angle', info['info']['obj_angle'], episode)
             
             #ReInitialize cur_state_stack
-            self.cur_state_stack = State(state_myrmex=deque([torch.zeros((1,2,1, 16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+            self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
+                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
-            self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
+            self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
             state = stack_to_state(self.cur_state_stack)
 
             for step in count():
@@ -287,7 +315,7 @@ class DQN_Algo():
 
                 reward = torch.tensor([reward])
                 if not done:
-                    self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
+                    self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
                     next_state = stack_to_state(self.cur_state_stack)
                 else:
                     next_state = None
@@ -313,7 +341,6 @@ class DQN_Algo():
                 #3 Test episodes 
                 for mode in ['max_gap', 'max_angle', 'random']:
                     r, s = self.test(mode)
-                    print(mode, r, s)
                     R.append(r)
                     self.summary_writer.add_scalar('Reward/test/' + mode, r, episode)
                     self.summary_writer.add_scalar('Ep_length/test/' +mode , s, episode)
@@ -403,9 +430,11 @@ if __name__=='__main__':
     parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
     parser.add_argument('--mem_size', required=False, default='7500')
     parser.add_argument('--expl_slope', required=False, default='50000')
+    parser.add_argument('--sensor', required=False, default='plate')
+
     opt = parser.parse_args()
 
-
+    sensor = opt.sensor
     expl_slope = int(opt.expl_slope)
     mem_size = int(opt.mem_size)
     batchsize = int(opt.batchsize)
@@ -416,49 +445,21 @@ if __name__=='__main__':
 
     time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
 
-        
-    # if continue_:
-
-    #     if opt.savedir is None:
-    #         filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/'
-    #     else:
-    #         filepath = opt.savedir 
-    
-
-    #     all_subdirs = [filepath+d for d in os.listdir(filepath) if os.path.isdir(filepath + d)]
-
-    #     last_modified = max(all_subdirs, key=os.path.getmtime)
-
-    #     with open(last_modified + '/training_progress.pickle', 'rb') as file:
-    #         progress = pickle.load(file) 
-
-    #     algo = DQN_Algo(filepath=last_modified,
-    #                     lr=lr, 
-    #                     expl_slope=15000, 
-    #                     discount_factor=0.9, 
-    #                     mem_size=7500, 
-    #                     batch_size=batchsize, 
-    #                     n_epochs=nepochs, 
-    #                     tau=0.9,
-    #                     n_timesteps=10, 
-    #                     global_step=progress['global_step'])
-
-    # else: 
-
     if opt.savedir is None:
         filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
     else:
         filepath = opt.savedir + time_string + '/'
 
     algo = DQN_Algo(filepath=filepath,
-                lr=lr, 
-                expl_slope=expl_slope, 
-                discount_factor=0.9, 
-                mem_size=mem_size, 
-                batch_size=batchsize, 
-                n_epochs=nepochs, 
-                tau=0.9,
-                n_timesteps=10)
+                    lr=lr, 
+                    expl_slope=expl_slope, 
+                    discount_factor=0.9, 
+                    mem_size=mem_size, 
+                    batch_size=batchsize, 
+                    n_epochs=nepochs, 
+                    tau=0.9,
+                    n_timesteps=10,
+                    sensor=sensor)
 
     algo.train()    
     algo.summary_writer.close()
