@@ -226,6 +226,70 @@ class placenet_v2(nn.Module):
         
         return q_values
     
+
+class placenet_v2_reduced(nn.Module):
+
+    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            self.tactile_ftrs = nn.Sequential(
+                Conv2Plus1D(in_channels=2, 
+                            out_channels=16,
+                            spatial_size=7,
+                            temporal_size=5),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=16,
+                            out_channels=32,
+                            spatial_size=5,
+                            temporal_size=3),
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(4608, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (5, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(72, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+            
+        self.pose_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(24,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+
+        self.output_net = torch.nn.Sequential(
+            torch.nn.Linear(128*2, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+    def forward(self, myrmex_data, 
+                      pose):
+        
+        combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+                                        self.pose_embedding(pose)], dim=1)
+
+        q_values = self.output_net(combined_embedding)
+        
+        return q_values
+    
 if __name__=='__main__':
  
 

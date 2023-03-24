@@ -28,10 +28,7 @@ import argparse
 
 State = namedtuple('State', 
                     ('state_myrmex',
-                     'state_ep', 
-                     'state_jp', 
-                     'state_jt', 
-                     'state_jv'))
+                     'state_ep'))
 
 Transition = namedtuple('Transition',
                         ('state',
@@ -47,11 +44,8 @@ def stack_to_state(state_stack):
     #     print(x.size())
     m = torch.cat(list(state_stack.state_myrmex), dim=2) 
     ep = torch.cat(list(state_stack.state_ep), dim=2)
-    jp = torch.cat(list(state_stack.state_jp), dim=2)
-    jt = torch.cat(list(state_stack.state_jt), dim=2)
-    jv = torch.cat(list(state_stack.state_jv), dim=2)
 
-    return State(m, ep, jp, jt, jv)
+    return State(m, ep)
 
 def NormalizeData(data, high, low):
     return (data - low) / (high - low)
@@ -86,7 +80,7 @@ def fingertip_hack(reading):
         taxel = np.max(reading[s:s+x])
         s+=x
         ret.append(taxel)
-    return np.array(ret)                                                                                                                                                                                                                                                    
+    return np.array(ret)
 
 class DQN_Algo():
 
@@ -102,8 +96,8 @@ class DQN_Algo():
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         #Policy and target network initilisation
-        self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-        self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+        self.policy_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+        self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.replay_buffer = ReplayMemory(mem_size)
@@ -146,10 +140,7 @@ class DQN_Algo():
         
         self.n_timesteps = n_timesteps
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+                                     state_ep=deque([torch.zeros((1, 1, 1, 4), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
 
         #contains rewards & length of episode for every episode
@@ -174,11 +165,8 @@ class DQN_Algo():
                                                      torch.from_numpy(left).view(1, 1, 1, 12)], 
                                                      dim=1).to(device)) #.type(torch.DoubleTensor)
         
-        cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 7).to(device))                      #.type(torch.DoubleTensor)
-        cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).view(1, 1, 1, 7).to(device))              #.type(torch.DoubleTensor)
-        cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).view(1, 1, 1, 7).to(device))                #.type(torch.DoubleTensor)
-        cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).view(1, 1, 1, 7).to(device))             #.type(torch.DoubleTensor)
-    
+        cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 4).to(device))                      #.type(torch.DoubleTensor)
+        
         return cur_stack
 
     def _normalize_observation(self, obs):
@@ -190,19 +178,16 @@ class DQN_Algo():
             max_ = self.env.observation_space['observation'][key].low
             
             if key == 'ee_pose':
-                min_ = min_[:3]
-                max_ = max_[:3]
-
-                pos  = NormalizeData(obs['observation'][key][:3], min_, max_)
+               
                 quat = obs['observation'][key][3:] 
 
-                normalized['observation'][key] = np.concatenate([pos, quat])
+                normalized['observation'][key] = quat
             else:
                 normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
         return normalized
     
     def save_checkpoint(self, save_buffer=False):
-        
+         
         torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Policy_Model')
 
         torch.save(self.target_net.state_dict(), self.FILEPATH +  '/Target_Model')       
@@ -210,6 +195,7 @@ class DQN_Algo():
         if save_buffer:
             with open(self.FILEPATH + 'exp_buffer.pickle', 'wb') as f:
                 pickle.dump(self.replay_buffer, f)
+
 
         return 0
     
@@ -244,10 +230,7 @@ class DQN_Algo():
 
         #ReInitialize cur_state_stack
         self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+                                     state_ep=deque([torch.zeros((1, 1, 1, 4), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
         self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
         state = stack_to_state(self.cur_state_stack)
@@ -290,10 +273,7 @@ class DQN_Algo():
             
             #ReInitialize cur_state_stack
             self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+                                     state_ep=deque([torch.zeros((1, 1, 1, 4), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
             self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
             state = stack_to_state(self.cur_state_stack)
@@ -389,7 +369,6 @@ class DQN_Algo():
         loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
 
         mean_Q_Vals = torch.mean(vals, dim=0)
-        mean_sav = torch.mean(state_action_values, )
         self.summary_writer.add_scalar('Loss/train', loss, self.stepcount)
 
         for i, q in enumerate(mean_Q_Vals):
