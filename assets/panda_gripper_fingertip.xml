@@ -22,6 +22,7 @@
         <mesh name="hand_collision"   file="meshes/collision/hand.stl"   scale="1 1 1" />
         
         <mesh name="ubi_tip_collision" file="meshes/collision/ubi_tip_collision.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="ubi_tip_collision_core" file="meshes/collision/ubi_tip_collision.stl" scale="0.0009 0.0009 0.0009"/>
 
         <mesh name="link0_0_visual"  file="meshes/visual/link0_0.obj"  scale="1 1 1" />
         <mesh name="link0_1_visual"  file="meshes/visual/link0_1.obj"  scale="1 1 1" />
@@ -81,6 +82,7 @@
         <mesh name="finger_1_visual" file="meshes/visual/finger_1.obj" scale="1 1 1" />
         
         <mesh name="ubi_tip_visual" file="meshes/visual/ubi_tip_visual.stl" scale="0.001 0.001 0.001"/>
+        <mesh name="ubi_tip_visual_core" file="meshes/visual/ubi_tip_visual.stl" scale="0.0009 0.0009 0.0009"/>
 
     </asset>
 
@@ -229,11 +231,21 @@
                                                 <geom  class="fingertip_pad_collision_4"/>
                                                 <geom  class="fingertip_pad_collision_5"/>
                                                 <!-- pos="0 0 0.02705" -->
-                                                <body name="panda_leftfinger_fingertip" pos="0 0 0.0475">
+                                                
+                                           
+                                                <body name="panda_leftfinger_fingertip" pos="0 0 0.0325" euler="0.11 0 0">
                                                     <inertial pos="0 0 0.0037" mass="0.078" diaginertia="0.000651 0.000651 0.000896" />
-                                                    <geom class="visual" mesh="ubi_tip_visual"  rgba="0 0 0 0.3" name="leftfinger_geom"/>
+                                                    <geom class="visual" mesh="ubi_tip_visual"  rgba="1 1 1 0.3" name="leftfinger_geom"/>
                                                     <geom class="collision" mesh="ubi_tip_collision"  />
                                                 </body>
+
+                                                <body name="panda_leftfinger_fingertip_core" pos="0 0 0.034" euler="0.11 0 0">
+                                                    <inertial pos="0 0 0.0037" mass="0" diaginertia="0.000651 0.000651 0.000896" />
+                                                    <geom class="visual" mesh="ubi_tip_visual_core"  rgba="1 0 0 1" name="leftfinger_geom_core"/>
+                                                    <geom class="collision" mesh="ubi_tip_collision_core"  />
+                                                </body>
+                                            
+                                            
                                             </body>
 
                                             <body name="panda_rightfinger" pos="0 0 0.0584" quat="0 0 0 1">
@@ -247,11 +259,18 @@
                                                 <geom  class="fingertip_pad_collision_3"/>
                                                 <geom  class="fingertip_pad_collision_4"/>
                                                 <geom  class="fingertip_pad_collision_5"/>
-
-                                                <body name="panda_rightfinger_fingertip" pos="0 0 0.0475" euler="0 0 3.141592653589793">
+                                                
+                                                
+                                                <body name="panda_rightfinger_fingertip_core" pos="0 0 0.034" euler="0.11 0 0">
                                                     <inertial pos="0 0 0.0037" mass="0.078" diaginertia="0.000651 0.000651 0.000896" />
-                                                    <geom class="visual" mesh="ubi_tip_visual" euler="0 0 3.141592653589793" rgba="0 0 0 0.3" name="rightfinger_geom"/>
-                                                    <geom  class="collision" mesh="ubi_tip_collision"  euler="0 0 3.141592653589793" />
+                                                    <geom class="visual" mesh="ubi_tip_visual_core" euler="0 0 0" rgba="1 0 0 1" name="rightfinger_geom_core"/>
+                                                    <geom  class="collision" mesh="ubi_tip_collision_core"  euler="0 0 0" />            
+                                                </body>
+
+                                                <body name="panda_rightfinger_fingertip" pos="0 0 0.0325" euler="0.11 0 0">
+                                                    <inertial pos="0 0 0.0037" mass="0" diaginertia="0.000651 0.000651 0.000896" />
+                                                    <geom class="visual" mesh="ubi_tip_visual" euler="0 0 0" rgba="1 1 1 0.3" name="rightfinger_geom"/>
+                                                    <geom  class="collision" mesh="ubi_tip_collision"  euler="0 0 0" />            
                                                 </body>
 
                                             </body>
@@ -293,6 +312,9 @@
 
         <exclude body1="panda_leftfinger" body2="panda_leftfinger_fingertip"/>
         <exclude body1="panda_rightfinger" body2="panda_rightfinger_fingertip"/>
+
+        <exclude body1="panda_rightfinger_fingertip" body2="panda_rightfinger_fingertip_core"/>
+        <exclude body1="panda_leftfinger_fingertip" body2="panda_leftfinger_fingertip_core"/>
 
     </contact>
 
