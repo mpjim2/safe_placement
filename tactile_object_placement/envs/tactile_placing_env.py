@@ -126,7 +126,7 @@ class TactileObjectPlacementEnv(gym.Env):
         # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
         
-
+        self.sensor = sensor
         
         self.max_episode_steps = 1000
 
@@ -255,7 +255,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
         self.range_obj_height = object_params.get("range_height", np.array([0.1/2, 0.1/2])) # [m]
         self.range_obj_l = object_params.get("range_l", np.array([0.04/2, 0.07/2])) # [m]; range width and length (requires object type "box")
-        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.15/2])) # [m]; range width and length (requires object type "box")
+        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.08/2])) # [m]; range width and length (requires object type "box")
         self.range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
 
         self.range_obj_x_pos = object_params.get("range_x_pos", np.array([0.275,0.525])) #[m]
@@ -274,8 +274,10 @@ class TactileObjectPlacementEnv(gym.Env):
             self._perform_sim_steps(100)
             if None not in self.current_msg.values():
                 break
-
-        self._set_EE_frame_to_gripcenter()
+        
+        #Fingertips are located at the franka gripper fingers; no transformation of EE Frame necessary
+        if sensor == 'plate':
+            self._set_EE_frame_to_gripcenter()
 
     # def _update_space_limits(self):
         
@@ -297,8 +299,8 @@ class TactileObjectPlacementEnv(gym.Env):
             # sample object width/2, length/2 and height/2 
             self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=self.range_obj_height[1] ) # height/2
 
-            self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.obj_size_2*0.75) # width/2
-            self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.obj_size_2*0.75) # length/2
+            self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.range_obj_w[1]) # width/2
+            self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.range_obj_l[1]) # length/2
             
             self.obj_height = self.obj_size_2
         else:
@@ -341,15 +343,50 @@ class TactileObjectPlacementEnv(gym.Env):
         #Mindest veschiebung Differenz der Sensor Diagonalen und halber höhe des Objekts
         #Maximal halbe Höhe des objekts
         #Verschiebe objekt entlang seiner Längsachse 
+
+        # FINGERTIP CASE: EE TO GRIPPER CASE /HAND 0.05
+        # min shift --> abs(obj_heihgt/2 - 0.05) 
+       
         obj_axis_n = (obj_axis / np.linalg.norm(obj_axis)) * self.obj_height/2
-        m_diag = math.sqrt((0.04**2) * 2)/2
 
-        diff = m_diag - np.linalg.norm(obj_axis_n) 
-        if diff >= 0:
-            min_shift = diff + 0.005
+        
+
+        if self.sensor == 'fingertip':
+            
+            # 1. compute corner points relative to bject center 
+            corners = compute_corner_coords(np.zeros(3), self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
+            
+            # 2. find maximum of corner Z coordinates
+            max_z = np.max(corners[:, -1])
+
+            # 3. Compute minimum shift along Object axis that avoids contact of hand & object
+            # 3.1 Compute shift along z
+            z_shift = max_z - 0.05
+            
+            if z_shift >= -0.005:
+                # 3.2 compute shift along object axis that shifts z by that amount
+                projected = np.array([obj_axis_n[0], obj_axis_n[1], 0])
+                magnitude = np.linalg.norm(projected)
+
+                theta = math.atan2(projected[1], projected[0])
+                hrztl_shift = z_shift * math.cos(theta)
+
+                min_shift = abs(hrztl_shift * (np.linalg.norm(obj_axis_n) / magnitude))
+       
+            else: 
+                min_shift = 0
         else:
-            min_shift = 0
 
+            
+            m_diag = math.sqrt((0.04**2) * 2)/2
+
+            diff = m_diag - np.linalg.norm(obj_axis_n) 
+            if diff >= 0:
+                min_shift = diff + 0.005
+            else:
+                min_shift = 0
+
+        
         ax_shift = np.random.uniform(low=min_shift, high=0.5*self.obj_height)
 
         position -= (obj_axis * ax_shift)
@@ -442,22 +479,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         current_pose, _ = self._get_obs(return_quat=True)
         current_pose = current_pose["observation"]["ee_pose"]
-        # cur_quat = current_pose[-4:]
-        # if self.init_quat is None:
-        #     self.init_quat = copy.deepcopy(cur_quat)
         
-
-        # dot = quat_dot(cur_quat, self.init_quat)
-        # angle = 2.0 * math.acos(min(abs(dot), 1.0))
-        
-        
-        # euler_init = quaternion_to_euler(np.array([0,0,0,1]))
-        # euler_cur  = quaternion_to_euler(cur_quat)        
-
-        # euler_diff = abs(euler_init - euler_cur)
-        
-        # if (math.pi/2 - abs(angle)) > 0.1:
-        # if euler_diff[0] < math.pi/4:
         if rotate_X > 0:
             quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.1)
         elif rotate_X < 0:
@@ -468,12 +490,7 @@ class TactileObjectPlacementEnv(gym.Env):
             quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.1)
         elif rotate_Y < 0:
             quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.1)
-        
-        # if quat_dot(quat_init, quat) < 0:
-        # quat *= -1
-        
-        # twist_quat = quat_init.inverse * quat
-        
+
         xyz = quat.vector 
 
         pos = np.zeros(3)
@@ -529,7 +546,7 @@ class TactileObjectPlacementEnv(gym.Env):
             rospy.logerr("Open Action failed!")
         return success
 
-    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=20):
+    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=10):
         
         self.grasp_client.cancel_all_goals()
         epsilon = GraspEpsilon(inner=eps, outer=eps)
