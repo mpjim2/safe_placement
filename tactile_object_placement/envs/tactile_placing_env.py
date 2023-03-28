@@ -808,14 +808,17 @@ class TactileObjectPlacementEnv(gym.Env):
 
     def _reset_robot(self):
         
+
+        twist = self._compute_twist(0, 0, 0)
+        self.twist_pub.publish(twist)
+        if not self.continuous:
+            self._perform_sim_steps(10)
+
         self._open_gripper()
         self._set_table_params(0.01)
 
         self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
             
-        twist = self._compute_twist(0, 0, 0)
-        self.twist_pub.publish(twist)
-        
         self.reset_world()
         if not self.continuous:
             self._perform_sim_steps(10)
@@ -843,6 +846,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         success = False
         self.max_episode_steps = 1000
+        p = False
         while not success:
 
             self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
@@ -861,10 +865,15 @@ class TactileObjectPlacementEnv(gym.Env):
                     if None not in self.current_msg.values():
                         break
             
+            if p:
+                print(self.current_msg['franka_state'].q)
+
             success, (obj_pos, obj_quat, angle) = self._initial_grasp(testing=options['testing'])
             
             if not success:
-               self._reset_robot()
+                p = True
+                print(self.current_msg['franka_state'].q)
+                self._reset_robot()
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
 
