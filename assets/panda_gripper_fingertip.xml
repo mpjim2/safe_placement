@@ -312,6 +312,9 @@
 
         <exclude body1="panda_leftfinger" body2="panda_leftfinger_fingertip"/>
         <exclude body1="panda_rightfinger" body2="panda_rightfinger_fingertip"/>
+        
+        <exclude body1="panda_rightfinger" body2="panda_rightfinger_fingertip_core"/>
+        <exclude body1="panda_leftfinger" body2="panda_leftfinger_fingertip_core"/>
 
         <exclude body1="panda_rightfinger_fingertip" body2="panda_rightfinger_fingertip_core"/>
         <exclude body1="panda_leftfinger_fingertip" body2="panda_leftfinger_fingertip_core"/>
