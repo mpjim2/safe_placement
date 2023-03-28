@@ -805,14 +805,29 @@ class TactileObjectPlacementEnv(gym.Env):
         self.max_episode_steps = 1000
         return 0
     
+
+    def _reset_robot(self):
+        
+        self._open_gripper()
+        self._set_table_params(0.01)
+
+        self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
+            
+        twist = self._compute_twist(0, 0, 0)
+        self.twist_pub.publish(twist)
+        
+        self.reset_world()
+        if not self.continuous:
+            self._perform_sim_steps(10)
+    
+        return 0
+    
     def reset(self, seed=None, options=None):
         
         super().reset(seed=seed)
 
+        self._reset_robot()
 
-        self._open_gripper()
-        self._set_table_params(0.01)
-        
         if not options is None:
             if options['testing'] == False:
                 gap = np.random.normal(loc=options['gap_size'], scale=0.002)
@@ -825,7 +840,6 @@ class TactileObjectPlacementEnv(gym.Env):
             
             self.anglerange = options['angle_range']
             
-        self.reset_world()    
 
         success = False
         self.max_episode_steps = 1000
@@ -847,17 +861,10 @@ class TactileObjectPlacementEnv(gym.Env):
                     if None not in self.current_msg.values():
                         break
             
-            self._setLoad(mass=0, load_inertia=list(np.eye(3).flatten()))
-            
-            twist = self._compute_twist(0, 0, 0)
-            self.twist_pub.publish(twist)
-            
-            self._open_gripper()
-            self.reset_world()
-            if not self.continuous:
-                self._perform_sim_steps(10)
-
             success, (obj_pos, obj_quat, angle) = self._initial_grasp(testing=options['testing'])
+            
+            if not success:
+               self._reset_robot()
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
 
