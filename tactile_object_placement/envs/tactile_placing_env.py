@@ -828,24 +828,23 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self._reset_robot()
 
-        if not options is None:
-            if options['testing'] == False:
-                gap = np.random.normal(loc=options['gap_size'], scale=0.002)
-                if gap < self.min_gapsize:
-                    gap = self.min_gapsize
-                # gap = np.random.uniform(self.min_gapsize, options['gap_size'])
-
-            else:
-                gap = options['gap_size']
-            
-            self.anglerange = options['angle_range']
-            
-
         success = False
         self.max_episode_steps = 1000
 
         regrasp_counter = 0
         while not success:
+            
+            if not options is None:
+                if options['testing'] == False:
+                    gap = np.random.normal(loc=options['gap_size'], scale=0.002)
+                    if gap < self.min_gapsize:
+                        gap = self.min_gapsize
+                    # gap = np.random.uniform(self.min_gapsize, options['gap_size'])
+
+                else:
+                    gap = options['gap_size']
+            
+            self.anglerange = options['angle_range']
 
             self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
             self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}

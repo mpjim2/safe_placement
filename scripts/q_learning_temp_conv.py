@@ -276,7 +276,7 @@ class DQN_Algo():
 
         for step in count():
             #experience sample: state, action, reward,  state+1
-            
+            print(step)
             action = self.select_action(state, explore=False)
             
             obs, reward, done, _ , info = self.env.step(action)
@@ -322,6 +322,7 @@ class DQN_Algo():
 
             for step in count():
                 #experience sample: state, action, reward,  state+1
+                print(step)
                 action = self.select_action(state)
 
                 obs, reward, done, _ , info = self.env.step(action)
@@ -365,14 +366,14 @@ class DQN_Algo():
                     if self.gapsize > 0.17:
                         self.gapsize = 0.17
 
-                    self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, episode)
+                self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, episode)
                 #only increase angle difficulty if the reward is high enough
                 if R[1] >= 0.98 and R[-1] >= 0.98:
                     self.angle_range += 0.05
                     if self.angle_range > np.pi/2:
                         self.angle_range = np.pi/2
                     
-                    self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, episode)
+                self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, episode)
                 
                 self.save_checkpoint()
 

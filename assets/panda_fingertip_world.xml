@@ -1,5 +1,7 @@
 <mujoco model="panda">
     <option collision="all" timestep="0.001" gravity="0 0 -9.81" cone="elliptic" />
+    <size nconmax="4000"/>
+
     <compiler angle="radian" />
 
     <visual>
