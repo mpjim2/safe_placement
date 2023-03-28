@@ -349,8 +349,6 @@ class TactileObjectPlacementEnv(gym.Env):
        
         obj_axis_n = (obj_axis / np.linalg.norm(obj_axis)) * self.obj_height/2
 
-        
-
         if self.sensor == 'fingertip':
             
             # 1. compute corner points relative to bject center 
@@ -377,7 +375,6 @@ class TactileObjectPlacementEnv(gym.Env):
                 min_shift = 0
         else:
 
-            
             m_diag = math.sqrt((0.04**2) * 2)/2
 
             diff = m_diag - np.linalg.norm(obj_axis_n) 
@@ -846,7 +843,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         success = False
         self.max_episode_steps = 1000
-        p = False
+
         while not success:
 
             self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
@@ -865,14 +862,9 @@ class TactileObjectPlacementEnv(gym.Env):
                     if None not in self.current_msg.values():
                         break
             
-            if p:
-                print(self.current_msg['franka_state'].q)
-
             success, (obj_pos, obj_quat, angle) = self._initial_grasp(testing=options['testing'])
             
             if not success:
-                p = True
-                print(self.current_msg['franka_state'].q)
                 self._reset_robot()
 
         corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)

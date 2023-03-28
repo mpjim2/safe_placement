@@ -25,7 +25,7 @@
   <arg name="realtime" default="1.0" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
   <arg name="render_offscreen" default="false" doc="Should camera streams be rendered and published?" />
   <arg name="use_fingertips" default="false" doc="Should Shadowhandfingertips be mounted to the gripper fingers?" />
-  <arg name="no_x" default="true" />
+  <arg name="no_x" default="false" />
   <!-- <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins.yaml" doc="Location of param file containing the mujoco plugin config" /> -->
   <arg name="transmission" default="effort" />
   <arg name="load_gripper" default="true" />
@@ -64,7 +64,7 @@
        value="$(find franka_mujoco)/config/rosconsole.config"/>
 
 
-  <node pkg="mujoco_ros" type="mujoco_server" name="mujoco_server" output="screen" >
+  <node pkg="mujoco_ros" type="mujoco_server" name="mujoco_server" output="log" >
     <param name="modelfile" type="str"  value="$(find safe_placement)/assets/$(arg modelfile)" />
     <param name="unpause"   value="$(arg unpause)" />
     <param name="visualize" value="$(eval not arg('headless'))" />
