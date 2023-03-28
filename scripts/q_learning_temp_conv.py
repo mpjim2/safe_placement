@@ -338,14 +338,14 @@ class DQN_Algo():
                     self.summary_writer.add_scalar('Ep_length/test/' +mode , s, episode)
                 
                 #Gap is closed as soon reward is positive
-                if R[0] >= 0.5:   
+                if R[0] >= 0.5 and R[-1] >= 0.5:   
                     self.gapsize += 0.002
                     if self.gapsize > 0.17:
                         self.gapsize = 0.17
 
                     self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, episode)
                 #only increase angle difficulty if the reward is high enough
-                if R[1] >= 0.98:
+                if R[1] >= 0.98 and R[-1] >= 0.98:
                     self.angle_range += 0.05
                     if self.angle_range > np.pi/2:
                         self.angle_range = np.pi/2
