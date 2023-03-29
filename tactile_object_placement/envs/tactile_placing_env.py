@@ -844,6 +844,7 @@ class TactileObjectPlacementEnv(gym.Env):
         success = False
         self.max_episode_steps = 1000
 
+        regrasp_counter = 0
         while not success:
 
             self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
@@ -866,18 +867,27 @@ class TactileObjectPlacementEnv(gym.Env):
             
             if not success:
                 self._reset_robot()
-
-        corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
-
-        lowpoint = np.min(corners[:, -1])
-
-        self.table_height = (lowpoint/2) - gap
-
-        self._set_table_params(self.table_height)
+                regrasp_counter += 1
             
-        observation    = self._get_obs()
+                if regrasp_counter >= 10:
+                    break
+        
+        if not regrasp_counter >= 10:
+            corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
 
-        info = {'info' : {'sampled_gap' : gap, 'obj_angle' : angle}}
+            lowpoint = np.min(corners[:, -1])
+
+            self.table_height = (lowpoint/2) - gap
+
+            self._set_table_params(self.table_height)
+
+            info = {'info' : {'sampled_gap' : gap, 'obj_angle' : angle, 'success' : True}}
+
+        else:
+            info = {'info' : {'sampled_gap' : None, 'obj_angle' : None, 'success' : False}}
+       
+
+        observation    = self._get_obs()
 
         return observation, info 
     

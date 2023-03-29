@@ -223,20 +223,42 @@ class DQN_Algo():
         else:
             action = self.policy_net(*state).max(1)[1].view(1,1)
         return action
+    
+    def _restart_env(self):
+        
+        self.env.close()
+        self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor=self.sensor)
+
+        return 0
+    
+    def _reset_env(self, options):
+
+        success = False
+        while not success:
+            obs, info = self.env.reset(options=options)
+            success = info['info']['success']
+
+            if not success:
+                self._restart_env()
+
+        return obs, info
 
     def test(self, mode='max_gap'):
         
         if mode == 'max_gap':
-            obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : 0})
-        
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : 0})
+
+            if not info['success']:
+                self._restart_env()
+
         elif mode == 'max_angle':
             g = self.gapsize - 0.002
             if g < 0.002:
                 g = 0.002
-            obs, info = self.env.reset(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range})
+            obs, info = self._reset_env(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range})
         
         elif mode == 'random':
-            obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
 
         obs = self._normalize_observation(obs)
 
@@ -280,7 +302,7 @@ class DQN_Algo():
         
         for episode in range(1, self.N_EPOCHS+1):
         
-            obs, info = self.env.reset(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
             obs = self._normalize_observation(obs)
 
             done = False
