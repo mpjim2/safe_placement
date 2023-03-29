@@ -233,23 +233,27 @@ class DQN_Algo():
     
     def _reset_env(self, options):
 
+        restart_counter = 0
         success = False
         while not success:
             obs, info = self.env.reset(options=options)
             success = info['info']['success']
-
+            
             if not success:
+                print('Resetting Env unsuccessful. Restarting...')
                 self._restart_env()
+                restart_counter += 1
+                if restart_counter >= 5:
+                    self.env.close()
 
+                    raise InterruptedError('Failed to reset Environment!')
+                    break
         return obs, info
 
     def test(self, mode='max_gap'):
         
         if mode == 'max_gap':
             obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : 0})
-
-            if not info['success']:
-                self._restart_env()
 
         elif mode == 'max_angle':
             g = self.gapsize - 0.002
@@ -276,7 +280,6 @@ class DQN_Algo():
 
         for step in count():
             #experience sample: state, action, reward,  state+1
-            print(step)
             action = self.select_action(state, explore=False)
             
             obs, reward, done, _ , info = self.env.step(action)
@@ -322,7 +325,6 @@ class DQN_Algo():
 
             for step in count():
                 #experience sample: state, action, reward,  state+1
-                print(step)
                 action = self.select_action(state)
 
                 obs, reward, done, _ , info = self.env.step(action)
