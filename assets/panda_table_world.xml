@@ -1,10 +1,7 @@
 <mujoco model="panda">
     <option collision="all" timestep="0.001" gravity="0 0 -9.81" cone="elliptic" />
     <size nconmax="4000"/>
-<<<<<<< HEAD
-=======
 
->>>>>>> 495b404 (ilos)
     <compiler angle="radian" />
 
     <visual>
@@ -15,6 +12,10 @@
         <texture builtin="checker" height="512" name="texplane" rgb1=".2 .3 .4" rgb2=".1 .15 .2" type="2d" width="512" />
         <material name="MatPlane" reflectance="0.05" shininess="0.01" specular="0.01" texrepeat="1 1" texture="texplane" texuniform="true" />
     </asset>
+
+
+    
+
 
     <custom>
 		<!-- All custom parameters related to contact surfaces have the prefix cs:: -->
@@ -46,12 +47,10 @@
         
         <body name="table" pos="0.3 0 0.01">
             <freejoint/>
+            <camera name="workspace_cam" pos="1.5 0 1." xyaxes="0 1 0 -.5 0 1" fovy="45" />
             <geom size="0.2 0.5 0.01" type="box" condim="3" contype="1" name="table_geom" mass="50" rgba="0.5 0.5 0.5 1"/>
         </body>
-        <body name="vistest" pos="0.3 0 0.01">
-            <freejoint/>
-            <geom size="0.001" type="sphere" condim="3" contype="1" name="vis_geom" mass="50" rgba="0.5 0.5 0.5 1"/>
-        </body>
+       
 
     </worldbody>
 

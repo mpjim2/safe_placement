@@ -1,0 +1,6 @@
+cam_config:
+  workspace_cam:
+    stream_type: 1 # RGB
+    frequency: 15
+    width: 720
+    height: 480

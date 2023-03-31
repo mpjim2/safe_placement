@@ -3,7 +3,7 @@
   <arg name="pipeline" default="ompl" />
 
   <!-- Robot Customization -->
-  <arg name="verbose"     default="false"  doc="Should more debug output be printed?" />
+  <arg name="verbose"     default="true"  doc="Should more debug output be printed?" />
   <arg name="unpause"     default="false"  doc="Should the simulation be unpaused on start?" />
   <arg name="rviz"        default="false"  doc="Should rviz be spawned?" />
   <arg name="arm_id"      default="panda" doc="Name of the panda robot to spawn" />
@@ -50,6 +50,8 @@
                   rpy:='$(arg roll) $(arg pitch) $(arg yaw)'
                   $(arg xacro_args)">
   </param>
+
+  <rosparam file="$(find safe_placement)/config/camera_config.yaml" subst_value="true"/>
 
   <rosparam file="$(find safe_placement)/config/franka_hw_sim.yaml" subst_value="true" />
   <rosparam file="$(find safe_placement)/config/sim_controllers.yaml" subst_value="true" />
