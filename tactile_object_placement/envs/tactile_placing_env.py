@@ -14,6 +14,7 @@ from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseStamped, PointStamped, QuaternionStamped, Twist, Vector3Stamped
 from franka_msgs.msg import FrankaState
 from franka_msgs.srv import SetEEFrame, SetLoad
+from sensor_msgs.msg import Image
 from tactile_msgs.msg import TactileState
 from franka_gripper.msg import GraspAction, GraspEpsilon, GraspGoal, MoveAction, MoveGoal, StopAction, StopGoal
 
@@ -26,6 +27,9 @@ import rospkg
 import math
 import time
 
+from datetime import datetime
+
+import rosbag
 
 def rotate_vec(v, q):
     return q.rotate(v)
@@ -118,11 +122,17 @@ class TactileObjectPlacementEnv(gym.Env):
         self.tactile_right_sub = message_filters.Subscriber("/myrmex_r", TactileState)
         self.tactile_right_cache = message_filters.Cache(self.tactile_right_sub, cache_size=1, allow_headerless=False)
         self.tactile_right_cache.registerCallback(self._new_msg_callback)
-
+        
         self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
         self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
         
-        
+
+        #Rosbag stuff for recording error in Reset Function
+        time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
+        bagname = '/tmp/error_visual' + time_string + '.bag'
+        self.error_bag = rosbag.Bag(bagname, 'w')
+        self.record = False
+
         # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
         # self.last_timestamps = {"franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
         
@@ -740,6 +750,16 @@ class TactileObjectPlacementEnv(gym.Env):
 
         return obj_pos, obj_quat, angle
     
+
+    def _camera_callback(self, msg):
+
+        topic = msg._connection_header["topic"]
+        if self.record:
+            self.error_bag.write(topic, msg)
+
+        return 0 
+    
+
     def _new_msg_callback(self, msg):
         topic = msg._connection_header["topic"]
 
@@ -867,9 +887,22 @@ class TactileObjectPlacementEnv(gym.Env):
             if not success:
                 self._reset_robot()
                 regrasp_counter += 1
-            
+                
+                if regrasp_counter == 1:
+                    self.record = True        
+                    self.workspace_cam_sub   = message_filters.Subscriber("/cameras/workspace_cam/rgb", Image)
+                    self.workspace_cam_cache = message_filters.Cache(self.workspace_cam_sub, cache_size=1, allow_headerless=False)
+                    self.workspace_cam_cache.registerCallback(self._camera_callback) 
+                
                 if regrasp_counter >= 10:
+                    self.record = False
+                    del(self.workspace_cam_cache)
+                    del(self.workspace_cam_cache)
+                    del(self.workspace_cam_sub)
                     break
+            elif regrasp_counter > 0:
+                self.record = False
+                
         
         if not regrasp_counter >= 10:
             corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, obj_quat)
@@ -891,5 +924,6 @@ class TactileObjectPlacementEnv(gym.Env):
         return observation, info 
     
     def close(self):
+        self.error_bag.close()
         if "self.launch" in locals():
             self.launch.stop()
