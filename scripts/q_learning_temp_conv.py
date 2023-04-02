@@ -253,16 +253,17 @@ class DQN_Algo():
     def test(self, mode='max_gap'):
         
         if mode == 'max_gap':
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : 0})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : False})
+
 
         elif mode == 'max_angle':
             g = self.gapsize - 0.002
             if g < 0.002:
                 g = 0.002
-            obs, info = self._reset_env(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range})
+            obs, info = self._reset_env(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range, 'record' : False})
         
         elif mode == 'random':
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : False})
 
         obs = self._normalize_observation(obs)
 
@@ -304,8 +305,11 @@ class DQN_Algo():
     def train(self):
         
         for episode in range(1, self.N_EPOCHS+1):
-        
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
+            
+            if episode % 1 == 0:
+                obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : True})
+            else:
+                obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : False})
             obs = self._normalize_observation(obs)
 
             done = False

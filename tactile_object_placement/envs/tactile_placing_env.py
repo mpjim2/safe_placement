@@ -129,8 +129,14 @@ class TactileObjectPlacementEnv(gym.Env):
 
         #Rosbag stuff for recording error in Reset Function
         time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
-        bagname = '/tmp/error_visual' + time_string + '.bag'
-        self.error_bag = rosbag.Bag(bagname, 'w')
+        
+        control_bagname = '/homes/mjimenezhaertel/Masterarbeit/bagfiles/control/control_visual' + time_string + '.bag'
+        error_bagname = '/homes/mjimenezhaertel/Masterarbeit/bagfiles/error/error_visual' + time_string + '.bag'
+
+
+        self.error_bag = rosbag.Bag(error_bagname, 'w')
+        self.control_bag = rosbag.Bag(control_bagname, 'w')
+        
         self.record = False
 
         # self.current_msg = {"franka_state" : None, "object_pos" : None, "object_quat" : None}
@@ -755,8 +761,10 @@ class TactileObjectPlacementEnv(gym.Env):
 
         topic = msg._connection_header["topic"]
         if self.record:
-            self.error_bag.write(topic, msg)
-
+            if self.error:
+                self.error_bag.write(topic, msg)
+            else:
+                self.control_bag.write(topic, msg)
         return 0 
     
 
@@ -852,6 +860,14 @@ class TactileObjectPlacementEnv(gym.Env):
         self.max_episode_steps = 1000
 
         regrasp_counter = 0
+
+        if options['record']:
+            self.record = True
+            self.error = False
+            self.workspace_cam_sub   = message_filters.Subscriber("/cameras/workspace_cam/rgb", Image)
+            self.workspace_cam_cache = message_filters.Cache(self.workspace_cam_sub, cache_size=1, allow_headerless=False)
+            self.workspace_cam_cache.registerCallback(self._camera_callback) 
+            
         while not success:
             
             if not options is None:
@@ -881,27 +897,33 @@ class TactileObjectPlacementEnv(gym.Env):
                     self._perform_sim_steps(10)
                     if None not in self.current_msg.values():
                         break
-            
+        
             success, (obj_pos, obj_quat, angle) = self._initial_grasp(testing=options['testing'])
             
             if not success:
                 self._reset_robot()
                 regrasp_counter += 1
                 
-                if regrasp_counter == 1:
-                    self.record = True        
-                    self.workspace_cam_sub   = message_filters.Subscriber("/cameras/workspace_cam/rgb", Image)
-                    self.workspace_cam_cache = message_filters.Cache(self.workspace_cam_sub, cache_size=1, allow_headerless=False)
-                    self.workspace_cam_cache.registerCallback(self._camera_callback) 
+                if regrasp_counter == 5 and not self.record:
+                    
+                    self.error = True
+                   
+                    if not self.record:       
+                        self.record = True
+                        self.workspace_cam_sub   = message_filters.Subscriber("/cameras/workspace_cam/rgb", Image)
+                        self.workspace_cam_cache = message_filters.Cache(self.workspace_cam_sub, cache_size=1, allow_headerless=False)
+                        self.workspace_cam_cache.registerCallback(self._camera_callback) 
                 
                 if regrasp_counter >= 10:
                     self.record = False
                     del(self.workspace_cam_cache)
-                    del(self.workspace_cam_cache)
                     del(self.workspace_cam_sub)
                     break
-            elif regrasp_counter > 0:
+
+            elif self.record:
                 self.record = False
+                del(self.workspace_cam_cache)
+                del(self.workspace_cam_sub)
                 
         
         if not regrasp_counter >= 10:
