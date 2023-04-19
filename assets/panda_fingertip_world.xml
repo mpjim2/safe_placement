@@ -16,10 +16,11 @@
     <custom>
 		<!-- All custom parameters related to contact surfaces have the prefix cs:: -->
 		<text name="cs::HydroelasticContactRepresentation" data="kTriangle"/>
-        <numeric name="cs::VisualizeSurfaces" data="1"/>
+        <numeric name="cs::VisualizeSurfaces" data="0"/>
 		<!-- Contact properties for each geom: hydroelasticModulus, dissipation, resolutionHint, staticFriction, dynamicFriction.
 		A rigid object has hydroelasticModulus of 0 and dissipation of 1. 
 		A soft box with a resolution hint of 0 uses a resolution automatically computed by drake. -->
+        <numeric name="cs::ApplyContactSurfaceForces" data="1"/>
 
         <numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/>
         <!-- <numeric name="cs::sphere_geom" data="0 1.0 0.4 0.3 0.3"/> -->
