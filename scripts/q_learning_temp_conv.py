@@ -39,20 +39,26 @@ Transition = namedtuple('Transition',
                          'next_state',
                          'reward'))
 
+State_reduced = namedtuple('State', 
+                    ('state_myrmex',
+                     'state_ep'))
 
 
-def stack_to_state(state_stack):
+def stack_to_state(state_stack, reduced=False):
     
     # for x in list(state_stack.state_myrmex):
     #     print(x.size())
     m = torch.cat(list(state_stack.state_myrmex), dim=2) 
     ep = torch.cat(list(state_stack.state_ep), dim=2)
-    jp = torch.cat(list(state_stack.state_jp), dim=2)
-    jt = torch.cat(list(state_stack.state_jt), dim=2)
-    jv = torch.cat(list(state_stack.state_jv), dim=2)
+    if not reduced:
+        jp = torch.cat(list(state_stack.state_jp), dim=2)
+        jt = torch.cat(list(state_stack.state_jt), dim=2)
+        jv = torch.cat(list(state_stack.state_jv), dim=2)
 
-    return State(m, ep, jp, jt, jv)
-
+        return State(m, ep, jp, jt, jv)
+    else:
+        return State_reduced(m, ep)
+    
 def NormalizeData(data, high, low):
     return (data - low) / (high - low)
 
@@ -73,8 +79,6 @@ class ReplayMemory(object):
         else: 
             return random.sample(self.memory, batch_size-1) + [self.memory[-1]]
 
-        
-
     def __len__(self):
         return len(self.memory)
 
@@ -88,24 +92,51 @@ def fingertip_hack(reading):
         ret.append(taxel)
     return np.array(ret)                                                                                                                                                                                                                                                    
 
+
+def empty_state(reduced, device, tactile_shape, n_timesteps):
+    if not reduced:
+        state = State(state_myrmex=deque([torch.zeros(tactile_shape, dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps),
+                      state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps),
+                      state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps),
+                      state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps),
+                      state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps))
+    else:
+        state = State_reduced(state_myrmex=deque([torch.zeros(tactile_shape, dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps),
+                      state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=device) for _ in range(n_timesteps)], maxlen=n_timesteps))
+    return state
+
 class DQN_Algo():
 
-    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, sensor="plate", global_step=None):
+    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, sensor="plate", global_step=None, architecture='temp_conv', reduced=False):
 
         self.sensor = sensor
         self.FILEPATH = filepath 
-        if not os.path.exists(self.FILEPATH):
-            os.makedirs(self.FILEPATH)
+        
 
         self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor=sensor)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         #Policy and target network initilisation
-        self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-        self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-        self.target_net.load_state_dict(self.policy_net.state_dict())
-
+        if architecture == 'temp_conv':
+            if reduced:
+                self.policy_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+            else:
+                self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+        else:
+            if reduced:
+                self.policy_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict()) 
+            else:
+                self.policy_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict()) 
+            
         self.replay_buffer = ReplayMemory(mem_size)
 
         self.EPS_START = 0.9
@@ -138,6 +169,7 @@ class DQN_Algo():
         self.angle_range = 0.17
         self.speed_curriculum = [0.1, 0.01]
 
+        self.reduced = reduced
 
         if sensor == "fingertip":
             self.tactile_shape = (1,2,1,12)
@@ -145,13 +177,7 @@ class DQN_Algo():
             self.tactile_shape = (1,2,1,16,16)
         
         self.n_timesteps = n_timesteps
-        self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
-
-
+        self.cur_state_stack = empty_state(reduced=self.reduced, device=self.device, tactile_shape=self.tactile_shape, n_timesteps=self.n_timesteps)
         #contains rewards & length of episode for every episode
      
 
@@ -159,7 +185,9 @@ class DQN_Algo():
 
         self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
         self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
-    
+
+        state = stack_to_state(self.cur_state_stack, reduced=self.reduced)
+        self.summary_writer.add_graph(self.policy_net, state)
 
     def obs_to_input(self, obs, cur_stack, device):
 
@@ -175,9 +203,11 @@ class DQN_Algo():
                                                      dim=1).to(device)) #.type(torch.DoubleTensor)
         
         cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).view(1, 1, 1, 7).to(device))                      #.type(torch.DoubleTensor)
-        cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).view(1, 1, 1, 7).to(device))              #.type(torch.DoubleTensor)
-        cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).view(1, 1, 1, 7).to(device))                #.type(torch.DoubleTensor)
-        cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).view(1, 1, 1, 7).to(device))             #.type(torch.DoubleTensor)
+        
+        if not self.reduced:
+            cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).view(1, 1, 1, 7).to(device))              #.type(torch.DoubleTensor)
+            cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).view(1, 1, 1, 7).to(device))                #.type(torch.DoubleTensor)
+            cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).view(1, 1, 1, 7).to(device))             #.type(torch.DoubleTensor)
     
         return cur_stack
 
@@ -253,31 +283,27 @@ class DQN_Algo():
     def test(self, mode='max_gap'):
         
         if mode == 'max_gap':
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : False})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
 
 
         elif mode == 'max_angle':
-            g = self.gapsize - 0.002
+            g = self.gapsize - 0.01
             if g < 0.002:
                 g = 0.002
-            obs, info = self._reset_env(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range, 'record' : False})
+            obs, info = self._reset_env(options={'gap_size' : g, 'testing' : True, 'angle_range' : self.angle_range})
         
         elif mode == 'random':
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : False})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
 
         obs = self._normalize_observation(obs)
 
         done = False
 
         #ReInitialize cur_state_stack
-        self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+        self.cur_state_stack = self.cur_state_stack = empty_state(reduced=self.reduced, device=self.device, tactile_shape=self.tactile_shape, n_timesteps=self.n_timesteps)
 
         self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-        state = stack_to_state(self.cur_state_stack)
+        state = stack_to_state(self.cur_state_stack, reduced=self.reduced)
 
         for step in count():
             #experience sample: state, action, reward,  state+1
@@ -289,7 +315,7 @@ class DQN_Algo():
             reward = torch.tensor([reward])
             if not done:
                 self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-                next_state = stack_to_state(self.cur_state_stack)
+                next_state = stack_to_state(self.cur_state_stack, reduced=self.reduced)
             else:
                 next_state = None
 
@@ -307,9 +333,9 @@ class DQN_Algo():
         for episode in range(1, self.N_EPOCHS+1):
             
             if episode % 1 == 0:
-                obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : True})
+                obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
             else:
-                obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'record' : False})
+                obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range})
             obs = self._normalize_observation(obs)
 
             done = False
@@ -318,14 +344,10 @@ class DQN_Algo():
             self.summary_writer.add_scalar('curriculum/sampled_angle', info['info']['obj_angle'], episode)
             
             #ReInitialize cur_state_stack
-            self.cur_state_stack = State(state_myrmex=deque([torch.zeros(self.tactile_shape, dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 1, 1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
+            self.cur_state_stack = self.cur_state_stack = empty_state(reduced=self.reduced, device=self.device, tactile_shape=self.tactile_shape, n_timesteps=self.n_timesteps)
 
             self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-            state = stack_to_state(self.cur_state_stack)
+            state = stack_to_state(self.cur_state_stack, reduced=self.reduced)
 
             for step in count():
                 #experience sample: state, action, reward,  state+1
@@ -337,7 +359,7 @@ class DQN_Algo():
                 reward = torch.tensor([reward])
                 if not done:
                     self.cur_state_stack = self.obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-                    next_state = stack_to_state(self.cur_state_stack)
+                    next_state = stack_to_state(self.cur_state_stack, reduced=self.reduced)
                 else:
                     next_state = None
 
@@ -368,7 +390,7 @@ class DQN_Algo():
                 
                 #Gap is closed as soon reward is positive
                 if R[0] >= 0.5 and R[-1] >= 0.5:   
-                    self.gapsize += 0.002
+                    self.gapsize += 0.01
                     if self.gapsize > 0.17:
                         self.gapsize = 0.17
 
@@ -393,8 +415,10 @@ class DQN_Algo():
 
         batch = Transition(*zip(*transitions))
 
-        state_batch = State(*zip(*batch.state))
-
+        if not reduced:
+            state_batch = State(*zip(*batch.state))
+        else:
+            state_batch = State_reduced(*zip(*batch.state))
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward).to(self.device)
 
@@ -409,7 +433,10 @@ class DQN_Algo():
         #2. Compute Target Q-Values
         next_state_values = torch.zeros(action_batch.size()[0], device=self.device, dtype=torch.double)
         if any(non_final_mask):
-            non_final_next_states = State(*zip(*[s for s in batch.next_state if s is not None]))
+            if not reduced:
+                non_final_next_states = State(*zip(*[s for s in batch.next_state if s is not None]))
+            else:
+                non_final_next_states = State_reduced(*zip(*[s for s in batch.next_state if s is not None]))
             with torch.no_grad():
                 next_state_values[non_final_mask] = self.target_net(*(torch.cat(e) for e in non_final_next_states)).max(1)[0]
 
@@ -452,6 +479,8 @@ if __name__=='__main__':
     parser.add_argument('--mem_size', required=False, default='7500')
     parser.add_argument('--expl_slope', required=False, default='50000')
     parser.add_argument('--sensor', required=False, default='plate')
+    parser.add_argument('--architecture', required=False, default='temp_conv')
+    parser.add_argument('--reduced_state', required=False, default='0')
 
     opt = parser.parse_args()
 
@@ -461,7 +490,9 @@ if __name__=='__main__':
     batchsize = int(opt.batchsize)
     nepochs = int(opt.nepochs)
     lr = float(opt.lr)
+    reduced = bool(int(opt.reduced_state))
 
+    
     #continue_ = int(opt.continue_training)
 
     time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
@@ -470,6 +501,19 @@ if __name__=='__main__':
         filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
     else:
         filepath = opt.savedir + time_string + '/'
+    
+    if not os.path.exists(filepath):
+        os.makedirs(filepath)
+    with open(filepath + 'options.txt', 'w') as f:
+        f.write("sensor: " + sensor + "\n")
+        f.write("expl_slope: " + opt.expl_slope + "\n")
+        f.write("mem_size: " + opt.mem_size + "\n")
+        f.write("batchsize: " + opt.batchsize + "\n")
+        f.write("nepochs: " + opt.nepochs + "\n")
+        f.write("lr: " + opt.lr + "\n")
+        f.write("reduced: " + opt.reduced_state + "\n")
+        f.write("architecture: " + opt.architecture)
+    
 
     algo = DQN_Algo(filepath=filepath,
                     lr=lr, 
@@ -480,7 +524,9 @@ if __name__=='__main__':
                     n_epochs=nepochs, 
                     tau=0.9,
                     n_timesteps=10,
-                    sensor=sensor)
+                    sensor=sensor,
+                    architecture=opt.architecture,
+                    reduced=reduced)
 
     algo.train()    
     algo.summary_writer.close()
