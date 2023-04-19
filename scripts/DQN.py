@@ -103,6 +103,18 @@ class MAT_based_net(nn.Module):
 
 #         return self.seq(x)
 
+class LSTM_custom(nn.Module):
+
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+
+    def forward(self, x):
+
+        final_hidden, (_,_) = self.lstm(x)
+
+        return final_hidden[:,-1,:]
+        
 
 class Conv2Plus1D(nn.Module):
     def __init__(self, in_channels, out_channels, spatial_size, temporal_size, padding=0):
@@ -225,6 +237,105 @@ class placenet_v2(nn.Module):
         q_values = self.output_net(combined_embedding)
         
         return q_values
+
+
+class placenet_LSTM(nn.Module):
+
+    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            self.tactile_ftrs = nn.Sequential(
+                Conv2Plus1D(in_channels=2, 
+                            out_channels=16,
+                            spatial_size=7,
+                            temporal_size=1),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=16,
+                            out_channels=32,
+                            spatial_size=5,
+                            temporal_size=1),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=32,
+                            out_channels=1,
+                            spatial_size=3,
+                            temporal_size=1),
+                nn.ReLU(),
+                nn.Flatten(start_dim=-2, end_dim=-1),
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(16, 128), 
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (1, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(12,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+            
+        self.pose_embedding = nn.Sequential(
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(7,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+
+        self.jp_embedding = nn.Sequential(
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(7,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        
+        self.jv_embedding = nn.Sequential(
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(7,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        
+        self.jt_embedding = nn.Sequential(
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(7,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+
+        self.output_net = torch.nn.Sequential(
+            torch.nn.Linear(128*5, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+    def forward(self, myrmex_data, 
+                      pose, 
+                      j_pos, 
+                      j_tau, 
+                      j_vel):
+ 
+
+        combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+                                        self.pose_embedding(pose),
+                                        self.jp_embedding(j_pos),
+                                        self.jt_embedding(j_tau),
+                                        self.jv_embedding(j_vel)], dim=1)
+
+        q_values = self.output_net(combined_embedding)
+        
+        return q_values
     
 
 class placenet_v2_reduced(nn.Module):
@@ -266,7 +377,7 @@ class placenet_v2_reduced(nn.Module):
             nn.Conv2d(1, 1, (5, 1), padding=0), 
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(24,128),
+            nn.Linear(42,128),
             nn.ReLU(),
             nn.Linear(128, 128),
             nn.ReLU()
@@ -284,16 +395,148 @@ class placenet_v2_reduced(nn.Module):
                       pose):
         
         combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
-                                        self.pose_embedding(pose)], dim=1)
+                                        self.pose_embedding(pose)
+                                       ], dim=1)
 
         q_values = self.output_net(combined_embedding)
         
         return q_values
     
-if __name__=='__main__':
+class placenet_v3_reduced(nn.Module):
+
+    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            self.tactile_ftrs = nn.Sequential(
+                Conv2Plus1D(in_channels=2, 
+                            out_channels=16,
+                            spatial_size=7,
+                            temporal_size=5),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=16,
+                            out_channels=32,
+                            spatial_size=5,
+                            temporal_size=3),
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(4608, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (5, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(72, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+            
+        self.jt_embedding = nn.Sequential(
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(7,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+
+        self.output_net = torch.nn.Sequential(
+            torch.nn.Linear(128*2, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+    def forward(self, myrmex_data, 
+                      j_tau):
+        
+        combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+                                        self.jt_embedding(j_tau)
+                                       ], dim=1)
+
+        q_values = self.output_net(combined_embedding)
+        
+        return q_values
+
+
+class placenet_LSTM_reduced(nn.Module):
+
+    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            self.tactile_ftrs = nn.Sequential(
+                Conv2Plus1D(in_channels=2, 
+                            out_channels=16,
+                            spatial_size=7,
+                            temporal_size=1),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=16,
+                            out_channels=32,
+                            spatial_size=5,
+                            temporal_size=1),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=32,
+                            out_channels=1,
+                            spatial_size=3,
+                            temporal_size=1),
+                nn.ReLU(),
+                nn.Flatten(start_dim=-2, end_dim=-1),
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(16, 128), 
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (1, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(12,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+            
+        self.pose_embedding = nn.Sequential(
+                nn.Flatten(start_dim=1, end_dim=2),
+                LSTM_custom(7,128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+
+        self.output_net = torch.nn.Sequential(
+            torch.nn.Linear(128*2, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+    def forward(self, myrmex_data, 
+                      pose):
  
 
+        combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+                                        self.pose_embedding(pose)
+                                       ], dim=1)
 
+        q_values = self.output_net(combined_embedding)
+        
+        return q_values
+
+
+if __name__=='__main__':
+ 
     x = torch.rand((1, 1, 10, 12))
 
     layer = nn.Conv2d(1, 1, (5, 1), padding=0)
