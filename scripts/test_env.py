@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 import sys
 import gym
@@ -24,27 +23,22 @@ if __name__=="__main__":
     g = 0.002
     ar = 0.17
 
-    for action in range(10000):
-        
-        print('########################')
-        print(action)
-        print('########################')
-
-        env.reset(options={'gap_size' : 0.002, 'angle_range' : 0.17, 'testing' : False})
+    for i in range(1):
+   
+        env.reset(options={'gap_size' : 0.1, 'angle_range' : 0.17, 'testing' : False, 'sim_steps' : 10, 'max_steps' : 500})
         done = False
-        time.sleep(0.5)
-        if action %100 == 0:
-            g += 0.002
-            ar += 0.05
-        
-        # time.sleep(3)
-        # while not done:
-        #     _, r, done, _, _ = env.step(3)
-            
-        #     if r == -0.5:
-        #         case_found = True
-        #         time.sleep(10)
-        # # if done: break
+
+        g += 0.005
+
+        while not done:
+            obs, r, done, _, info = env.step(3)
+
+            # print(obs['observation']['myrmex_l'])
+            if r > 0:
+                time.sleep(2)
+                print(r)
+                break
+        # if done: break
     # env.reset()
         
 # time.sleep(30)
