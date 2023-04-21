@@ -159,9 +159,9 @@ class TactileObjectPlacementEnv(gym.Env):
             self.num_taxels = 32
 
         elif sensor == 'plate':
-            tactile_obs = Box(low=0, high=1, shape=(16*16,), dtype=np.float64)
+            tactile_obs = Box(low=0, high=1, shape=(4*4,), dtype=np.float64)
             launch_file = "panda.launch"
-            self.num_taxels = 16*16
+            self.num_taxels = 4*4
 
         self.observation_space = Dict({
             "observation" : Dict({
@@ -451,11 +451,11 @@ class TactileObjectPlacementEnv(gym.Env):
         joint_velocities = np.array(current_obs.dq, dtype=np.float64)
         
 
-        myrmex_data_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) #/self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
-        #myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
+        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) /self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
+        myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
-        myrmex_data_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) #/self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
-        #myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
+        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) /self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
+        myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
         # try:
         #     time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
@@ -566,7 +566,7 @@ class TactileObjectPlacementEnv(gym.Env):
             rospy.logerr("Open Action failed!")
         return success
 
-    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=10):
+    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=70):
         
         self.grasp_client.cancel_all_goals()
         epsilon = GraspEpsilon(inner=eps, outer=eps)
@@ -621,12 +621,9 @@ class TactileObjectPlacementEnv(gym.Env):
         #object Y-Value in World Frame
         
         reward = 0
-        
-        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)   
-        if self._check_object_grip(obj_pos) == False or self.max_episode_steps == 0:
-            reward = -0.9
-
-        else:
+        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+        if open_gripper:
+            
             #object Y-Axis in World frame        
             quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
             corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
@@ -644,8 +641,12 @@ class TactileObjectPlacementEnv(gym.Env):
                     reward = 0.001
 
             elif open_gripper:
-                reward = -1
-        
+                reward = -0.4
+        else:
+               
+            if self._check_object_grip(obj_pos) == False or self.max_episode_steps == 0:
+                reward = -0.5
+
         return reward    
     
     def _perform_sim_steps(self, num_sim_steps):
@@ -673,7 +674,6 @@ class TactileObjectPlacementEnv(gym.Env):
 
             self._perform_sim_steps(10)
             
-            observation = self._get_obs()
             reward = self._compute_reward(open_gripper=True)
             
         else:
@@ -689,7 +689,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
             reward = self._compute_reward()
 
-        if reward < 0 or action[-1] == 1:
+        if reward != 0:
             done = True
 
             if action[-1] == 1:
@@ -698,11 +698,15 @@ class TactileObjectPlacementEnv(gym.Env):
 
                 self.twist_pub.publish(twist)
                 self._perform_sim_steps(1000)
+                
+                observation = self._get_obs()
+                if reward > 0:
+                    stable = self._compute_reward(open_gripper=True)
 
-                stable = self._compute_reward(open_gripper=True)
-
-                if not stable >= 0.98:
-                    reward = -1
+                    if stable >= 0.98:
+                        reward = 1
+                    else:
+                        reward *= 0.5
 
         reward += smooth_reward
 

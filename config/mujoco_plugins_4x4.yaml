@@ -1,0 +1,75 @@
+MujocoPlugins:
+  - type: mujoco_ros_control/MujocoRosControlPlugin
+    hardware:
+      type: franka_mujoco/FrankaHWSim
+      control_period: 0.001
+      # robot_namespace: $(arg ns)
+
+  - type: mujoco_ros_sensors/MujocoRosSensorsPlugin
+
+  - type: mujoco_contact_surfaces/MujocoContactSurfacesPlugin
+    SurfacePlugins:
+      - {
+          type: mujoco_contact_surface_sensors/TaxelSensor,
+          sensorName: "myrmex_sensor_r",
+          geomName: "myrmex_foam_right",
+          topicName: "/myrmex_r",
+          updateRate: 50.0,
+          visualize: True,
+          include_margin: 0.01,
+          method: "weighted",
+          sample_resolution: 0.01,
+          taxels:
+            [
+              [-0.039, -0.039, 0.003], 
+              [-0.039, -0.013000000000000001, 0.003], 
+              [-0.039, 0.012999999999999998, 0.003], 
+              [-0.039, 0.039, 0.003], 
+              [-0.013000000000000001, -0.039, 0.003], 
+              [-0.013000000000000001, -0.013000000000000001, 0.003], 
+              [-0.013000000000000001, 0.012999999999999998, 0.003], 
+              [-0.013000000000000001, 0.039, 0.003], 
+              [0.012999999999999998, -0.039, 0.003], 
+              [0.012999999999999998, -0.013000000000000001, 0.003], 
+              [0.012999999999999998, 0.012999999999999998, 0.003], 
+              [0.012999999999999998, 0.039, 0.003], 
+              [0.039, -0.039, 0.003], 
+              [0.039, -0.013000000000000001, 0.003], 
+              [0.039, 0.012999999999999998, 0.003], 
+              [0.039, 0.039, 0.003]
+            ]
+        }
+      - {
+          type: mujoco_contact_surface_sensors/TaxelSensor,
+          sensorName: "myrmex_sensor_l",
+          geomName: "myrmex_foam_left",
+          topicName: "/myrmex_l",
+          updateRate: 50.0,
+          visualize: True,
+          include_margin: 0.01,
+          method: "weighted",
+          sample_resolution: 0.01,
+          taxels:
+            [
+              [-0.039, -0.039, 0.003], 
+              [-0.039, -0.013000000000000001, 0.003], 
+              [-0.039, 0.012999999999999998, 0.003], 
+              [-0.039, 0.039, 0.003], 
+              [-0.013000000000000001, -0.039, 0.003], 
+              [-0.013000000000000001, -0.013000000000000001, 0.003], 
+              [-0.013000000000000001, 0.012999999999999998, 0.003], 
+              [-0.013000000000000001, 0.039, 0.003], 
+              [0.012999999999999998, -0.039, 0.003], 
+              [0.012999999999999998, -0.013000000000000001, 0.003], 
+              [0.012999999999999998, 0.012999999999999998, 0.003], 
+              [0.012999999999999998, 0.039, 0.003], 
+              [0.039, -0.039, 0.003], 
+              [0.039, -0.013000000000000001, 0.003], 
+              [0.039, 0.012999999999999998, 0.003], 
+              [0.039, 0.039, 0.003]
+            ]
+
+        }
+      # - { type: mujoco_contact_surface_sensors/FlatTactileSensor, sensorName: "myrmex_sensor_r", geomName: "myrmex_foam_right", topicName: "/myrmex_r", updateRate: 50.0, visualize: False, resolution: 0.025 }
+      # - { type: mujoco_contact_surface_sensors/FlatTactileSensor, sensorName: "myrmex_sensor_l", geomName: "myrmex_foam_left",  topicName: "/myrmex_l", updateRate: 50.0, visualize: False, resolution: 0.025 }
+      # - { type: mujoco_contact_surface_sensors/FlatTactileSensor, sensorName: "myrmex_sensor0", geomName: "myrmex_foam_right", topicName: "/tactile_module_16x16_v2", updateRate: 50.0, visualize: False, resolution: 0.025 }
