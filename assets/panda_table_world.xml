@@ -1,6 +1,6 @@
 <mujoco model="panda">
-    <option collision="all" timestep="0.001" gravity="0 0 -9.81" cone="elliptic" />
-    <size nconmax="4000"/>
+    <option timestep="0.001" gravity="0 0 -9.81" cone="elliptic" />
+    <size nconmax="3000" njmax="4000"/>
 
     <compiler angle="radian" />
 
@@ -17,6 +17,7 @@
     
 
 
+    
     <custom>
 		<!-- All custom parameters related to contact surfaces have the prefix cs:: -->
 		<text name="cs::HydroelasticContactRepresentation" data="kTriangle"/>
@@ -24,13 +25,14 @@
 		<!-- Contact properties for each geom: hydroelasticModulus, dissipation, resolutionHint, staticFriction, dynamicFriction.
 		A rigid object has hydroelasticModulus of 0 and dissipation of 1. 
 		A soft box with a resolution hint of 0 uses a resolution automatically computed by drake. -->
-		<!-- <numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/> -->
-        <numeric name="cs::ApplyContactSurfaceForces" data="1"/>
 
-		<numeric name="cs::myrmex_foam_right" data="0.001 7.0 0 1 1"/>
-        <numeric name="cs::myrmex_foam_left"  data="0.001 7.0 0 1 1"/>
+        <numeric name="cs::ApplyContactSurfaceForces" data="0"/>
+		<numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/>
+
+		<numeric name="cs::myrmex_foam_right" data="5e4 1.0 0 0.3 0.3"/>
+        <numeric name="cs::myrmex_foam_left"  data="5e4 1.0 0 0.3 0.3"/>
 		<!---<numeric name="cs::myrmex_foam" data="5e4 5.0 0 0.3 0.3"/> -->
-	</custom> 
+	</custom>
 
     <include file="panda_gripper_myrmex.xml" />
 
@@ -42,7 +44,7 @@
 
 			<freejoint/>
 
-            <geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" rgba="1 0 0 1" friction="1 0.005 0.0001"/>
+            <geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" rgba="1 0 0 0.3" friction="1 0.005 0.0001"/>
             <site name="object_center" pos="0 0 0" size="0.001" rgba="1 0 0 0" type="sphere" />
 		</body>
         

@@ -22,8 +22,8 @@
         <numeric name="cs::ApplyContactSurfaceForces" data="1"/>
 		<numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/>
 
-		<numeric name="cs::myrmex_foam_right" data="0.001 7.0 0 1 1"/>
-        <numeric name="cs::myrmex_foam_left"  data="0.001 7.0 0 1 1"/>
+		<numeric name="cs::myrmex_foam_right" data="5e4 1.0 0 0.3 0.3"/>
+        <numeric name="cs::myrmex_foam_left"  data="5e4 1.0 0 0.3 0.3"/>
 		<!---<numeric name="cs::myrmex_foam" data="5e4 5.0 0 0.3 0.3"/> -->
 	</custom>
 
@@ -37,7 +37,7 @@
 
 			<freejoint/>
 
-            <geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" rgba="1 0 0 1" friction="1 0.005 0.0001"/>
+            <geom size="0.04 0.04 0.04" type="box" condim="3" contype="1" conaffinity="1" name="object_geom" mass="2" rgba="1 0 0 0" friction="1 0.005 0.0001"/>
             <site name="object_center" pos="0 0 0" size="0.001" rgba="1 0 0 0" type="sphere" />
 		</body>
         
