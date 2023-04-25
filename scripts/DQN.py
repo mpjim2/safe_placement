@@ -141,26 +141,45 @@ class Conv2Plus1D(nn.Module):
 
 class placenet_v2(nn.Module):
 
-    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+    def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
         super().__init__()
 
         if sensor_type == 'plate':
-            self.tactile_ftrs = nn.Sequential(
-                Conv2Plus1D(in_channels=2, 
-                            out_channels=16,
-                            spatial_size=7,
-                            temporal_size=5),
-                nn.ReLU(),
-                Conv2Plus1D(in_channels=16,
-                            out_channels=32,
-                            spatial_size=5,
-                            temporal_size=3),
-                nn.ReLU(),
-                nn.Flatten(),
-                nn.Linear(4608, 128),
-                nn.ReLU(),
-                nn.Linear(128, 128),
-                nn.ReLU()
+            if size == 16:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=7,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=5,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(4608, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                    )
+            if size == 4:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=2,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=2,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(512, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
                 )
         elif sensor_type =='fingertip':
             
@@ -340,26 +359,45 @@ class placenet_LSTM(nn.Module):
 
 class placenet_v2_reduced(nn.Module):
 
-    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+    def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
         super().__init__()
 
         if sensor_type == 'plate':
-            self.tactile_ftrs = nn.Sequential(
-                Conv2Plus1D(in_channels=2, 
-                            out_channels=16,
-                            spatial_size=7,
-                            temporal_size=5),
-                nn.ReLU(),
-                Conv2Plus1D(in_channels=16,
-                            out_channels=32,
-                            spatial_size=5,
-                            temporal_size=3),
-                nn.ReLU(),
-                nn.Flatten(),
-                nn.Linear(4608, 128),
-                nn.ReLU(),
-                nn.Linear(128, 128),
-                nn.ReLU()
+            if size == 16:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=7,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=5,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(4608, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                    )
+            if size == 4:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=2,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=2,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(512, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
                 )
         elif sensor_type =='fingertip':
             
@@ -373,6 +411,7 @@ class placenet_v2_reduced(nn.Module):
                 nn.ReLU()
                 )
             
+
         self.pose_embedding = nn.Sequential(
             nn.Conv2d(1, 1, (5, 1), padding=0), 
             nn.ReLU(),
@@ -404,26 +443,45 @@ class placenet_v2_reduced(nn.Module):
     
 class placenet_v3_reduced(nn.Module):
 
-    def __init__(self, n_actions, n_timesteps, sensor_type) -> None:
+    def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
         super().__init__()
 
         if sensor_type == 'plate':
-            self.tactile_ftrs = nn.Sequential(
-                Conv2Plus1D(in_channels=2, 
-                            out_channels=16,
-                            spatial_size=7,
-                            temporal_size=5),
-                nn.ReLU(),
-                Conv2Plus1D(in_channels=16,
-                            out_channels=32,
-                            spatial_size=5,
-                            temporal_size=3),
-                nn.ReLU(),
-                nn.Flatten(),
-                nn.Linear(4608, 128),
-                nn.ReLU(),
-                nn.Linear(128, 128),
-                nn.ReLU()
+            if size == 16:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=7,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=5,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(4608, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                    )
+            if size == 4:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=2,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=2,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(512, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
                 )
         elif sensor_type =='fingertip':
             
@@ -537,10 +595,26 @@ class placenet_LSTM_reduced(nn.Module):
 
 if __name__=='__main__':
  
-    x = torch.rand((1, 1, 10, 12))
+    x = torch.rand((1, 2, 10, 4, 4))
 
-    layer = nn.Conv2d(1, 1, (5, 1), padding=0)
+    tactile_ftrs = tactile_ftrs = nn.Sequential(
+                Conv2Plus1D(in_channels=2, 
+                            out_channels=16,
+                            spatial_size=2,
+                            temporal_size=5),
+                nn.ReLU(),
+                Conv2Plus1D(in_channels=16,
+                            out_channels=32,
+                            spatial_size=2,
+                            temporal_size=3),
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(512, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
 
-    y = layer(x)
+    y = tactile_ftrs(x)
 
     print(y.size())
