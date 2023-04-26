@@ -128,7 +128,7 @@ def empty_state(reduced, device, tactile_shape, n_timesteps):
 
 class DQN_Algo():
 
-    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, sensor="plate", global_step=None, architecture='temp_conv', reduced=0):
+    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, episode=0, sensor="plate", global_step=None, architecture='temp_conv', reduced=0, grid_size=4):
 
         self.sensor = sensor
         self.FILEPATH = filepath 
@@ -138,32 +138,33 @@ class DQN_Algo():
         self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor=sensor)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        
+        self.START_EP = episode
         #Policy and target network initilisation
         if architecture == 'temp_conv':
             if reduced == 1:
-                self.policy_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-                self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.policy_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 0:
-                self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-                self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             else: 
-                self.policy_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-                self.target_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.policy_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
         else:
             if reduced:
-                self.policy_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-                self.target_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.policy_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict()) 
             else:
-                self.policy_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
-                self.target_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor).double().to(self.device)
+                self.policy_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict()) 
             
-        self.replay_buffer = ReplayMemory(mem_size)
+        
 
         self.EPS_START = 0.9
         self.EPS_END = 0.05
@@ -185,13 +186,16 @@ class DQN_Algo():
         if not global_step is None:
             self.stepcount=global_step
             #load NN Dictionary
-            self.policy_net.load_state_dict(torch.load(self.FILEPATH + '/Model'))
-            self.target_net.load_state_dict(torch.load(self.FILEPATH + '/Model'))
-
+            self.policy_net.load_state_dict(torch.load(self.FILEPATH + '/Policy_Model'))
+            self.target_net.load_state_dict(torch.load(self.FILEPATH + '/Target_Model'))
+            with open(self.FILEPATH + 'exp_buffer.pickle', 'rb') as f:
+                self.replay_buffer = pickle.load(f)
         else:
             self.stepcount = 0
-        
+            
+            self.replay_buffer = ReplayMemory(mem_size)
 
+        self.grid_size = grid_size
         #curriculum parameters
         self.gapsize = 0.002
         self.angle_range = 0.17
@@ -201,11 +205,12 @@ class DQN_Algo():
         self.test_avg = 0
 
         self.reduced = reduced
-
+        
+        self.reward_fn = 'close_gap'
         if sensor == "fingertip":
             self.tactile_shape = (1,2,1,12)
         elif sensor == "plate":
-            self.tactile_shape = (1,2,1,4,4)
+            self.tactile_shape = (1,2,1,grid_size,grid_size)
         
         self.n_timesteps = n_timesteps
         self.cur_state_stack = empty_state(reduced=self.reduced, device=self.device, tactile_shape=self.tactile_shape, n_timesteps=self.n_timesteps)
@@ -223,8 +228,8 @@ class DQN_Algo():
     def obs_to_input(self, obs, cur_stack, device):
 
         if self.sensor == 'plate':
-            cur_stack.state_myrmex.append(torch.cat([torch.from_numpy(obs['myrmex_r']).view(1, 1, 1,4,4),
-                                                    torch.from_numpy(obs['myrmex_l']).view(1, 1, 1,4,4)], 
+            cur_stack.state_myrmex.append(torch.cat([torch.from_numpy(obs['myrmex_r']).view(1, 1, 1,self.grid_size,self.grid_size),
+                                                    torch.from_numpy(obs['myrmex_l']).view(1, 1, 1,self.grid_size,self.grid_size)], 
                                                     dim=1).to(device)) #.type(torch.DoubleTensor)
         elif self.sensor == 'fingertip':
             right = fingertip_hack(obs['myrmex_r'])
@@ -269,9 +274,9 @@ class DQN_Algo():
     
     def save_checkpoint(self, save_buffer=False):
         
-        torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Policy_Model')
+        torch.save(self.policy_net.state_dict(), self.FILEPATH + 'Policy_Model')
 
-        torch.save(self.target_net.state_dict(), self.FILEPATH +  '/Target_Model')       
+        torch.save(self.target_net.state_dict(), self.FILEPATH +  'Target_Model')       
 
         if save_buffer:
             with open(self.FILEPATH + 'exp_buffer.pickle', 'wb') as f:
@@ -318,7 +323,7 @@ class DQN_Algo():
 
     def test(self, log_actions=False):
         
-        obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'max_steps' : self.max_ep_steps, 'sim_steps' : self.sim_steps})
+        obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'max_steps' : self.max_ep_steps, 'sim_steps' : self.sim_steps, 'reward_fn' :self.reward_fn})
         print('RESET DONE TEST')
         obs = self._normalize_observation(obs)
 
@@ -364,9 +369,9 @@ class DQN_Algo():
 
     def train(self):
         
-        for episode in range(1, self.N_EPOCHS+1):
+        for episode in range(self.START_EP+1, self.START_EP + self.N_EPOCHS+1):
             
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'max_steps' : self.max_ep_steps, 'sim_steps' : self.sim_steps})
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'max_steps' : self.max_ep_steps, 'sim_steps' : self.sim_steps, 'reward_fn' : self.reward_fn})
             obs = self._normalize_observation(obs)
 
             done = False
@@ -409,11 +414,11 @@ class DQN_Algo():
             print('Episode ', episode, ' done after ', step+1,  ' Steps ! reward: ', float(reward))
             
 
-            self.summary_writer.add_scalar('Reward/train/Cumulative', cumulative_reward, episode)
+            # self.summary_writer.add_scalar('Reward/train/Cumulative', cumulative_reward, episode)
             self.summary_writer.add_scalar('Reward/train/final', reward, episode)
             self.summary_writer.add_scalar('Ep_length/train', step+1, episode)
             
-            if episode % 100 == 0:
+            if episode % 5 == 0:
                 
                 R = []
                 S = []
@@ -425,18 +430,19 @@ class DQN_Algo():
                     R.append(float(r))
                     S.append(int(s))
                     C.append(float(c))
-
+                    self.summary_writer.add_scalar('Reward/test/final', r, episode+i)
+                    self.summary_writer.add_scalar('Ep_length/test/', s, episode+i)
+                    
                 mr = np.mean(R)
                 ms = np.mean(S)
                 mc = np.mean(C)
 
-                self.summary_writer.add_scalar('Reward/test/cumulative', mc, episode)
-                self.summary_writer.add_scalar('Reward/test/final', mr, episode)
-                self.summary_writer.add_scalar('Ep_length/test/', ms, episode)
+                self.summary_writer.add_scalar('Reward/test/mean', mr, episode)
+                
                 
                 #Curriculum: first increase gapsize then increase angle range
                 if self.sim_steps > 10:
-                    if mr >= 0.5:   
+                    if mr >= 0.6:   
                         self.sim_steps -= 10
                         if self.sim_steps < 10:
                             self.sim_steps = 10
@@ -446,6 +452,7 @@ class DQN_Algo():
                         self.gapsize += 0.0025
                         if self.gapsize > 0.08:
                             self.gapsize = 0.08
+                            self.reward_fn = 'place'
                         if self.max_ep_steps < 1000:
                             self.max_ep_steps += 50
                 else:
@@ -461,7 +468,7 @@ class DQN_Algo():
                     
                 self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, episode)
                 
-                self.save_checkpoint()
+                self.save_checkpoint(save_buffer=True)
 
 
         self.save_checkpoint(save_buffer=True)
@@ -542,7 +549,9 @@ if __name__=='__main__':
     parser.add_argument('--sensor', required=False, default='plate')
     parser.add_argument('--architecture', required=False, default='temp_conv')
     parser.add_argument('--reduced_state', required=False, default='0')
-
+    parser.add_argument('--continue_', required=False, default='0')
+    parser.add_argument('--global_step', required=False, default='0')
+    parser.add_argument('--episode', required=False, default='0')    
     opt = parser.parse_args()
 
     sensor = opt.sensor
@@ -552,29 +561,34 @@ if __name__=='__main__':
     nepochs = int(opt.nepochs)
     lr = float(opt.lr)
     reduced = int(opt.reduced_state)
-
+    global_step = int(opt.global_step)
+    episode = int(opt.episode)
     
-    #continue_ = int(opt.continue_training)
+    continue_ = bool(int(opt.continue_))
 
-    time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
-
-    if opt.savedir is None:
-        filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
+    if not continue_:
+        time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
+        global_step = None
+        if opt.savedir is None:
+            filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
+        else:
+            filepath = opt.savedir + time_string + '/'
+        
+        if not os.path.exists(filepath):
+            os.makedirs(filepath)
+        with open(filepath + 'options.txt', 'w') as f:
+            f.write("sensor: " + sensor + "\n")
+            f.write("expl_slope: " + opt.expl_slope + "\n")
+            f.write("mem_size: " + opt.mem_size + "\n")
+            f.write("batchsize: " + opt.batchsize + "\n")
+            f.write("nepochs: " + opt.nepochs + "\n")
+            f.write("lr: " + opt.lr + "\n")
+            f.write("reduced: " + opt.reduced_state + "\n")
+            f.write("architecture: " + opt.architecture)
     else:
-        filepath = opt.savedir + time_string + '/'
-    
-    if not os.path.exists(filepath):
-        os.makedirs(filepath)
-    with open(filepath + 'options.txt', 'w') as f:
-        f.write("sensor: " + sensor + "\n")
-        f.write("expl_slope: " + opt.expl_slope + "\n")
-        f.write("mem_size: " + opt.mem_size + "\n")
-        f.write("batchsize: " + opt.batchsize + "\n")
-        f.write("nepochs: " + opt.nepochs + "\n")
-        f.write("lr: " + opt.lr + "\n")
-        f.write("reduced: " + opt.reduced_state + "\n")
-        f.write("architecture: " + opt.architecture)
-    
+        filepath = opt.savedir   
+        
+
 
     algo = DQN_Algo(filepath=filepath,
                     lr=lr, 
@@ -586,8 +600,10 @@ if __name__=='__main__':
                     tau=0.9,
                     n_timesteps=10,
                     sensor=sensor,
+                    global_step=global_step,
                     architecture=opt.architecture,
-                    reduced=reduced)
+                    reduced=reduced,
+                    episode = episode)
 
     algo.train()    
     algo.summary_writer.close()

@@ -97,7 +97,7 @@ def compute_corner_coords(center, w, l, h, quat):
 class TactileObjectPlacementEnv(gym.Env):
     metadata = {}
 
-    def __init__(self, object_params=dict(), curriculum=False, sensor="fingertip", continuous=False):
+    def __init__(self, object_params=dict(), curriculum=False, sensor="fingertip", continuous=False, grid_size=4):
 
         super().__init__()
 
@@ -159,9 +159,10 @@ class TactileObjectPlacementEnv(gym.Env):
             self.num_taxels = 32
 
         elif sensor == 'plate':
-            tactile_obs = Box(low=0, high=1, shape=(4*4,), dtype=np.float64)
+            
+            tactile_obs = Box(low=0, high=1, shape=(grid_size*grid_size,), dtype=np.float64)
             launch_file = "panda.launch"
-            self.num_taxels = 4*4
+            self.num_taxels = grid_size*grid_size
 
         self.observation_space = Dict({
             "observation" : Dict({
@@ -277,6 +278,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.max_timesteps = 1000
         self.angle_range = 0.17
 
+        self.contact_counter = 0
         self.last_command = None
         while True:
             self._perform_sim_steps(100)
@@ -487,18 +489,18 @@ class TactileObjectPlacementEnv(gym.Env):
         
         cmd = [0, 0]
         if rotate_X > 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.1)
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.15)
             cmd[0] += 1
         elif rotate_X < 0:
-            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.1)
+            quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=-0.15)
             cmd[0] += 1
 
     # if euler_diff[1] < math.pi/2:
         if rotate_Y > 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.1)
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.15)
             cmd[1] += 1
         elif rotate_Y < 0:
-            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.1)
+            quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.15)
             cmd[1] -= 1
         
         xyz = quat.vector 
@@ -506,11 +508,11 @@ class TactileObjectPlacementEnv(gym.Env):
         pos = np.zeros(3)
         if translate_Z < 0:  
             # if current_pose[2] > self.table_height*2 + 0.022:      
-            pos[2] += 0.01
+            pos[2] += 0.02
         
         elif translate_Z > 0:
             if current_pose[2] < 0.5:
-                pos[2] -= 0.01
+                pos[2] -= 0.02
 
         twist_msg = Twist()
 
@@ -566,7 +568,7 @@ class TactileObjectPlacementEnv(gym.Env):
             rospy.logerr("Open Action failed!")
         return success
 
-    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=70):
+    def _close_gripper(self, width=0.01, eps=0.08, speed=0.03, force=10):
         
         self.grasp_client.cancel_all_goals()
         epsilon = GraspEpsilon(inner=eps, outer=eps)
@@ -619,34 +621,53 @@ class TactileObjectPlacementEnv(gym.Env):
 
     def _compute_reward(self, open_gripper=False):
         #object Y-Value in World Frame
-        
         reward = 0
-        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
-        if open_gripper:
-            
-            #object Y-Axis in World frame        
-            quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
-            corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
 
-            if np.min(corners[:, -1]) <= 0.000001 + self.table_height*2:
+        if self.reward_fn == 'place':
+            obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+            if self._check_object_grip(obj_pos) == False or self.max_episode_steps == 0:
+                reward = -1
+            
+            elif open_gripper:
                 
-                if open_gripper:
-                
+                #object Y-Axis in World frame        
+                quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
+                corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
+
+                if np.min(corners[:, -1]) <= 0.000001 + self.table_height*2:
+                    
+                    # if open_gripper:
+                    
                     quat = pq.Quaternion(quat)
                     z_axis = rotate_vec(np.array([0, 0, 1]), quat)
                             
                     # dot product of world Y and object Y axis
                     reward = np.dot(np.array([0, 0, 1]), z_axis)
+                    # else:
+                    #     reward = 0.001
+
                 else:
-                    reward = 0.001
+                    reward = -1
+                        
+        elif self.reward_fn == 'close_gap':
+            obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+            quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
 
-            elif open_gripper:
-                reward = -0.4
-        else:
-               
+            corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
+            
             if self._check_object_grip(obj_pos) == False or self.max_episode_steps == 0:
-                reward = -0.5
-
+                reward = -1
+            else:
+                if np.min(corners[:, -1]) <= 0.000001 + self.table_height*2:
+                    self.contact_counter += 1
+                    if self.contact_counter >= 3:
+                        reward = 1
+                    elif open_gripper:
+                        reward = 1
+                elif open_gripper:
+                    reward = -1
+                    self.contact_counter = 0
+                
         return reward    
     
     def _perform_sim_steps(self, num_sim_steps):
@@ -706,7 +727,7 @@ class TactileObjectPlacementEnv(gym.Env):
                     if stable >= 0.98:
                         reward = 1
                     else:
-                        reward *= 0.5
+                        reward -1
 
         reward += smooth_reward
 
@@ -859,6 +880,8 @@ class TactileObjectPlacementEnv(gym.Env):
         self.sim_steps = options['sim_steps']
         self.max_episode_steps = options['max_steps']
 
+        self.contact_counter = 0
+        self.reward_fn = options['reward_fn']
         regrasp_counter = 0
 
         while not success:
