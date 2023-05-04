@@ -102,6 +102,7 @@ def fingertip_hack(reading):
         taxel = np.max(reading[s:s+x])
         s+=x
         ret.append(taxel)
+
     return np.array(ret)                                                                                                                                                                                                                                                    
 
 def approxRollingAvg(avg, sample, N):
@@ -128,7 +129,7 @@ def empty_state(reduced, device, tactile_shape, n_timesteps):
 
 class DQN_Algo():
 
-    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, episode=0, sensor="plate", global_step=None, architecture='temp_conv', reduced=0, grid_size=4):
+    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps, episode=0, sensor="plate", global_step=None, architecture='temp_conv', reduced=0, grid_size=16):
 
         self.sensor = sensor
         self.FILEPATH = filepath 
@@ -147,8 +148,8 @@ class DQN_Algo():
                 self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 0:
-                self.policy_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.placenet_v2(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             else: 
                 self.policy_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
@@ -224,6 +225,7 @@ class DQN_Algo():
 
         state = stack_to_state(self.cur_state_stack, reduced=self.reduced)
         self.summary_writer.add_graph(self.policy_net, state)
+        self.tactile_test = None
 
     def obs_to_input(self, obs, cur_stack, device):
 
@@ -233,6 +235,15 @@ class DQN_Algo():
                                                     dim=1).to(device)) #.type(torch.DoubleTensor)
         elif self.sensor == 'fingertip':
             right = fingertip_hack(obs['myrmex_r'])
+            
+            # if self.tactile_test is not None:
+            #     diff = self.tactile_test - right
+            #     print('DIFF')
+            #     print(diff)
+            #     print('Values:')
+            #     print(right)
+            
+            self.tactile_test = right
             left  = fingertip_hack(obs['myrmex_l'])
             cur_stack.state_myrmex.append(torch.cat([torch.from_numpy(right).view(1, 1, 1, 12),
                                                      torch.from_numpy(left).view(1, 1, 1, 12)], 
@@ -321,10 +332,10 @@ class DQN_Algo():
                     break
         return obs, info
 
-    def test(self, log_actions=False):
+    def test(self, log_actions=False, action=None):
         
         obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'max_steps' : self.max_ep_steps, 'sim_steps' : self.sim_steps, 'reward_fn' :self.reward_fn})
-        print('RESET DONE TEST')
+
         obs = self._normalize_observation(obs)
 
         done = False
@@ -338,8 +349,10 @@ class DQN_Algo():
         cumulative_reward = 0
         for step in count():
             #experience sample: state, action, reward,  state+1
-            action = self.select_action(state, explore=False)
-            
+            if action is None:
+                action = self.select_action(state, explore=False)
+            else:
+                action = action
             if log_actions:
                 a_vec = self.env.DISCRETE_ACTIONS[action]
 
@@ -359,11 +372,10 @@ class DQN_Algo():
                 next_state = None
 
             state = next_state
-
             if done:
                 break
 
-        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step+1)
+        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step+1, ' Termination Cause: ' , info['cause'])
         
         return reward, cumulative_reward, step+1
 
@@ -418,7 +430,7 @@ class DQN_Algo():
             self.summary_writer.add_scalar('Reward/train/final', reward, episode)
             self.summary_writer.add_scalar('Ep_length/train', step+1, episode)
             
-            if episode % 5 == 0:
+            if episode % 100 == 0:
                 
                 R = []
                 S = []
@@ -447,21 +459,21 @@ class DQN_Algo():
                         if self.sim_steps < 10:
                             self.sim_steps = 10
             
-                elif self.gapsize < 0.08:
+                elif self.gapsize < 0.015:
                     if mr >= 0.5:   
-                        self.gapsize += 0.0025
-                        if self.gapsize > 0.08:
-                            self.gapsize = 0.08
+                        self.gapsize += 0.005
+                        if self.gapsize > 0.015:
+                            self.gapsize = 0.015
                             self.reward_fn = 'place'
-                        if self.max_ep_steps < 1000:
-                            self.max_ep_steps += 50
-                else:
-                    if mr >= 0.9:
-                        self.angle_range += 0.05
-                        if self.angle_range > np.pi/2:
-                            self.angle_range = np.pi/2
-                        if self.max_ep_steps < 1000:
-                            self.max_ep_steps += 50
+                        # if self.max_ep_steps < 1000:
+                        #     self.max_ep_steps += 50
+                # else:
+                #     if mr >= 0.9:
+                #         self.angle_range += 0.05
+                #         if self.angle_range > np.pi/2:
+                #             self.angle_range = np.pi/2
+                #         # if self.max_ep_steps < 1000:
+                #         #     self.max_ep_steps += 50
                 
                 self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, episode)
                 #only increase angle difficulty if the reward is high enough
@@ -497,23 +509,33 @@ class DQN_Algo():
         vals = self.policy_net(*(torch.cat(e) for e in state_batch))
         state_action_values = vals.gather(1, action_batch)
         
-        
         #2. Compute Target Q-Values
+        #Double DQN: Decouble action selection and value estimation
+        #Use policy network to choose best action
+        #use target network to estimate value of that action 
         next_state_values = torch.zeros(action_batch.size()[0], device=self.device, dtype=torch.double)
         if any(non_final_mask):
             if not reduced:
                 non_final_next_states = State(*zip(*[s for s in batch.next_state if s is not None]))
             else:
                 non_final_next_states = State_reduced(*zip(*[s for s in batch.next_state if s is not None]))
+            
             with torch.no_grad():
-                next_state_values[non_final_mask] = self.target_net(*(torch.cat(e) for e in non_final_next_states)).max(1)[0]
+                #simple max of q vals. Target net is used for selection and evaluation
+                # next_state_values[non_final_mask] = self.target_net(*(torch.cat(e) for e in non_final_next_states)).max(1)[0]
+                
+                #double DQN: Select action using policy net; evaluate using target net
+                next_state_values_ = self.target_net(*(torch.cat(e) for e in non_final_next_states))        
+                next_state_vs = self.policy_net(*(torch.cat(e) for e in non_final_next_states))
+                next_state_actions = torch.argmax(next_state_vs, dim=1).unsqueeze(dim=1)
+
+                next_state_values[non_final_mask] = next_state_values_.gather(1, next_state_actions).squeeze()
 
         expected_state_action_values = (next_state_values * self.discount_factor) + reward_batch
 
         loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
 
         mean_Q_Vals = torch.mean(vals, dim=0)
-        mean_sav = torch.mean(state_action_values, )
         self.summary_writer.add_scalar('Loss/train', loss, self.stepcount)
 
         for i, q in enumerate(mean_Q_Vals):
@@ -597,7 +619,7 @@ if __name__=='__main__':
                     mem_size=mem_size, 
                     batch_size=batchsize, 
                     n_epochs=nepochs, 
-                    tau=0.9,
+                    tau=0.95,
                     n_timesteps=10,
                     sensor=sensor,
                     global_step=global_step,

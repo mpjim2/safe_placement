@@ -357,6 +357,131 @@ class placenet_LSTM(nn.Module):
         return q_values
     
 
+class dueling_placenet(nn.Module):
+    
+    def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            if size == 16:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=7,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=5,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(4608, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                    )
+            if size == 4:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=2,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=2,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(512, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (5, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(72, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+            
+        self.pose_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+
+        self.jp_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+        
+        self.jv_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+        
+        self.jt_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
+
+        self.advantage_stream = torch.nn.Sequential(
+            torch.nn.Linear(128*5, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+        self.value_stream = torch.nn.Sequential(
+            torch.nn.Linear(128*5, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 1)
+        )
+
+    def forward(self, myrmex_data, 
+                      pose, 
+                      j_pos, 
+                      j_tau, 
+                      j_vel):
+        
+        combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+                                        self.pose_embedding(pose),
+                                        self.jp_embedding(j_pos),
+                                        self.jt_embedding(j_tau),
+                                        self.jv_embedding(j_vel)], dim=1)
+
+        advantage = self.advantage_stream(combined_embedding)
+        value     = self.value_stream(combined_embedding)
+        
+        q_values = value + (advantage - advantage.mean())
+        
+        return q_values
+
 class placenet_v2_reduced(nn.Module):
 
     def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
