@@ -103,7 +103,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         pkg_path = rospkg.RosPack().get_path("safe_placement")
 
-        self.myrmex_max_val = 0.8
+        self.myrmex_max_val = 0.35
 
         self.franka_state_sub = message_filters.Subscriber("franka_state_controller/franka_states", FrankaState)
         self.franka_state_cache = message_filters.Cache(self.franka_state_sub, cache_size=1, allow_headerless=False)
@@ -262,15 +262,16 @@ class TactileObjectPlacementEnv(gym.Env):
         self.obj_types = object_params.get("types", ["box"])
         self.range_obj_radius = object_params.get("range_radius", np.array([0.04, 0.055])) # [m]
         self.range_obj_height = object_params.get("range_height", np.array([0.1/2, 0.1/2])) # [m]
-        self.range_obj_l = object_params.get("range_l", np.array([0.04/2, 0.07/2])) # [m]; range width and length (requires object type "box")
-        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.08/2])) # [m]; range width and length (requires object type "box")
-        self.range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.1])) # [kg]
+        self.range_obj_l = object_params.get("range_l", np.array([0.04/2, 0.06/2])) # [m]; range width and length (requires object type "box")
+        self.range_obj_w = object_params.get("range_w", np.array([0.04/2, 0.06/2])) # [m]; range width and length (requires object type "box")
+        self.range_obj_mass = object_params.get("range_mass", np.array([0.01, 0.05])) # [kg]
 
         self.range_obj_x_pos = object_params.get("range_x_pos", np.array([0.275,0.525])) #[m]
         self.range_obj_y_pos = object_params.get("range_y_pos", np.array([-0.2,0.2])) #[m]
 
         self.sensor_thickness = 0.005
 
+        
         self.init_quat = None
         self.min_gapsize = 0.002
         self.table_height = 0
@@ -278,6 +279,8 @@ class TactileObjectPlacementEnv(gym.Env):
         self.max_timesteps = 1000
         self.angle_range = 0.17
 
+
+        self.noop_counter = 0
         self.contact_counter = 0
         self.last_command = None
         while True:
@@ -307,11 +310,18 @@ class TactileObjectPlacementEnv(gym.Env):
         if self.obj_type == "box":
             self.obj_geom_type_value = 6
             # sample object width/2, length/2 and height/2 
-            self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=self.range_obj_height[1] ) # height/2
-
-            self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.range_obj_w[1]) # width/2
-            self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.range_obj_l[1]) # length/2
             
+            # self.obj_size_2 = np.random.uniform(low=self.range_obj_height[0], high=self.range_obj_height[1] ) # height/2
+
+            # self.obj_size_0 = np.random.uniform(low=self.range_obj_w[0], high=self.range_obj_w[1]) # width/2
+            # self.obj_size_1 = np.random.uniform(low=self.range_obj_l[0], high=self.range_obj_l[1]) # length/2
+            
+            self.obj_size_2 = self.range_obj_height[1]
+
+            self.obj_size_0 = self.range_obj_w[1]
+            self.obj_size_1 = self.range_obj_l[1]
+            
+
             self.obj_height = self.obj_size_2
         else:
             # self.obj_type == "cylinder"
@@ -453,10 +463,10 @@ class TactileObjectPlacementEnv(gym.Env):
         joint_velocities = np.array(current_obs.dq, dtype=np.float64)
         
 
-        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) /self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
+        myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) /self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
         myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
-        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) /self.myrmex_max_val + 0.000001*np.random.randn(self.num_taxels)
+        myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) /self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
         myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
         # try:
@@ -487,7 +497,7 @@ class TactileObjectPlacementEnv(gym.Env):
         current_pose, _ = self._get_obs(return_quat=True)
         current_pose = current_pose["observation"]["ee_pose"]
         
-        cmd = [0, 0]
+        cmd = np.array([0, 0])
         if rotate_X > 0:
             quat = quat * pq.Quaternion(axis=[1, 0, 0], angle=0.15)
             cmd[0] += 1
@@ -498,10 +508,10 @@ class TactileObjectPlacementEnv(gym.Env):
     # if euler_diff[1] < math.pi/2:
         if rotate_Y > 0:
             quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=0.15)
-            cmd[1] += 1
+            
         elif rotate_Y < 0:
             quat = quat * pq.Quaternion(axis=[0, 1, 0], angle=-0.15)
-            cmd[1] -= 1
+            
         
         xyz = quat.vector 
 
@@ -509,11 +519,15 @@ class TactileObjectPlacementEnv(gym.Env):
         if translate_Z < 0:  
             # if current_pose[2] > self.table_height*2 + 0.022:      
             pos[2] += 0.02
+            cmd[1] += 1
         
         elif translate_Z > 0:
             if current_pose[2] < 0.5:
                 pos[2] -= 0.02
-
+                cmd[1] -= 1
+            else:
+                self.contact_counter += 1
+                
         twist_msg = Twist()
 
         twist_msg.linear.x = pos[0]
@@ -524,12 +538,13 @@ class TactileObjectPlacementEnv(gym.Env):
         twist_msg.angular.y = xyz[1]
         twist_msg.angular.z = xyz[2]
         smooth_reward = 0
-
+        
         if not self.last_command is None:
             diff = self.last_command - cmd
             if max(diff) == 2:
-                smooth_reward = -0.001
+                smooth_reward = -0.0001
 
+        self.last_command = cmd
         return twist_msg, smooth_reward
 
     def _check_object_grip(self, obj_pos=None):
@@ -559,6 +574,7 @@ class TactileObjectPlacementEnv(gym.Env):
             success = self.release_client.get_result()
             
         else:
+
             success = None
             while success is None:
                 self._perform_sim_steps(10)
@@ -582,6 +598,7 @@ class TactileObjectPlacementEnv(gym.Env):
             success = self.grasp_client.get_result()
             
         else:
+
             success = None
             while success is None: 
                 self._perform_sim_steps(10)
@@ -613,62 +630,60 @@ class TactileObjectPlacementEnv(gym.Env):
     
         #{0,0,0.17} translation from flange to in between fingers; default for f_x_center
         response = None
+        #SIMULATIONSTEP PREEMPTED
         while response is None:
             response = self.set_load(mass=mass, F_x_center_load=F_x_center_load, load_inertia=load_inertia)
             self._perform_sim_steps(1)
 
         return response.success
 
-    def _compute_reward(self, open_gripper=False):
+    def _compute_reward(self, compute_final_reward=False):
         #object Y-Value in World Frame
         reward = 0
-
-        if self.reward_fn == 'place':
-            obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
-            if self._check_object_grip(obj_pos) == False or self.max_episode_steps == 0:
-                reward = -1
-            
-            elif open_gripper:
+        
+        info = {'cause' : 0}
+        obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
+        #check if object is still in hand
+        if self._check_object_grip(obj_pos) == False:
+            reward = -1
+            info['cause'] = 'lostObject'
+        
+        if self.max_episode_steps == 0:
+            info['cause'] = 'timeout'
+            if self.contact_counter >= 1:
+                reward = 0.25
                 
-                #object Y-Axis in World frame        
+            else:
+                reward = -1
+                
+        else:
+
+            if compute_final_reward or self.reward_fn=='close_gap':
+                
                 quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
                 corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
-
                 if np.min(corners[:, -1]) <= 0.000001 + self.table_height*2:
                     
-                    # if open_gripper:
-                    
-                    quat = pq.Quaternion(quat)
-                    z_axis = rotate_vec(np.array([0, 0, 1]), quat)
-                            
-                    # dot product of world Y and object Y axis
-                    reward = np.dot(np.array([0, 0, 1]), z_axis)
-                    # else:
-                    #     reward = 0.001
+                    if self.reward_fn=='close_gap':
+                        self.contact_counter += 1
+                        if self.contact_counter >= 5:
+                            info['cause'] = 'Contact'
+                            compute_final_reward = True
 
+                    if compute_final_reward:
+                        quat = pq.Quaternion(quat)
+                        z_axis = rotate_vec(np.array([0, 0, 1]), quat)
+                                
+                        reward = np.dot(np.array([0, 0, 1]), z_axis)
+                    
                 else:
-                    reward = -1
+                    if self.reward_fn == 'close_gap':
+                        self.contact_counter = 0
+                    if compute_final_reward:
                         
-        elif self.reward_fn == 'close_gap':
-            obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
-            quat = quaternion_to_numpy(self.current_msg['object_quat'].quaternion)
+                        reward = -1
 
-            corners = compute_corner_coords(obj_pos, self.obj_size_0, self.obj_size_1, self.obj_size_2, quat)
-            
-            if self._check_object_grip(obj_pos) == False or self.max_episode_steps == 0:
-                reward = -1
-            else:
-                if np.min(corners[:, -1]) <= 0.000001 + self.table_height*2:
-                    self.contact_counter += 1
-                    if self.contact_counter >= 3:
-                        reward = 1
-                    elif open_gripper:
-                        reward = 1
-                elif open_gripper:
-                    reward = -1
-                    self.contact_counter = 0
-                
-        return reward    
+        return reward, info    
     
     def _perform_sim_steps(self, num_sim_steps):
         goal = StepGoal(num_steps=num_sim_steps)
@@ -687,7 +702,6 @@ class TactileObjectPlacementEnv(gym.Env):
 
         action = self.DISCRETE_ACTIONS[action]
         info = {'cause' : 0}
-
         if action[-1] == 1:
             #DONE
             stop_, smooth_reward = self._compute_twist(0, 0, 0)
@@ -695,10 +709,9 @@ class TactileObjectPlacementEnv(gym.Env):
 
             self._perform_sim_steps(10)
             
-            reward = self._compute_reward(open_gripper=True)
+            reward, info = self._compute_reward(compute_final_reward=True)
             
         else:
-
             twist, smooth_reward = self._compute_twist(action[2], 
                                                        action[1], 
                                                        action[0])
@@ -708,12 +721,24 @@ class TactileObjectPlacementEnv(gym.Env):
 
             observation = self._get_obs()
 
-            reward = self._compute_reward()
+            if all(v==0 for v in action):
+                self.noop_counter += 1
+               
+                if self.noop_counter >= 10:
+                    info['cause'] = 'Noop'
+                    done = True
+                    reward = -1
+                    return observation, reward, done, False, info
+            else:
+                self.noop_counter = 0
+
+            reward , info = self._compute_reward()
 
         if reward != 0:
             done = True
 
             if action[-1] == 1:
+                info['cause'] = 'OpenedGripper'
                 self._open_gripper()
                 twist, _ = self._compute_twist(0,0,1)
 
@@ -722,7 +747,7 @@ class TactileObjectPlacementEnv(gym.Env):
                 
                 observation = self._get_obs()
                 if reward > 0:
-                    stable = self._compute_reward(open_gripper=True)
+                    stable, _ = self._compute_reward(compute_final_reward=True)
 
                     if stable >= 0.98:
                         reward = 1
@@ -747,6 +772,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         grasp_success = self._close_gripper()
 
+ 
         if grasp_success:
             self._setLoad(mass=self.obj_mass, load_inertia=list(np.eye(3).flatten()))
             resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
@@ -827,6 +853,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.current_msg = {"myrmex_l" : None, "myrmex_r" : None, "franka_state" : None, "object_pos" : None, "object_quat" : None}
         self.last_timestamps = {"myrmex_l" : 0, "myrmex_r" : 0, "franka_state" : 0, "object_pos" : 0, "object_quat" : 0}
         #wait for all messages to arrive
+
         while True:
             self._perform_sim_steps(1)
             if None not in self.current_msg.values():
@@ -850,7 +877,6 @@ class TactileObjectPlacementEnv(gym.Env):
     
 
     def _reset_robot(self):
-        
 
         twist, _ = self._compute_twist(0, 0, 0)
         self.twist_pub.publish(twist)
@@ -880,6 +906,7 @@ class TactileObjectPlacementEnv(gym.Env):
         self.sim_steps = options['sim_steps']
         self.max_episode_steps = options['max_steps']
 
+        self.noop_counter = 0
         self.contact_counter = 0
         self.reward_fn = options['reward_fn']
         regrasp_counter = 0
