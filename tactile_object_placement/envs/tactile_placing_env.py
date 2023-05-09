@@ -359,21 +359,7 @@ class TactileObjectPlacementEnv(gym.Env):
         py_quat = pq.Quaternion(quat)
 
         obj_axis = np.array(rotate_vec(v=[0,0,1], q=py_quat))
-        
-        #Mittelpunkt der Myrmex Sensoren
-        # position[2] -= 0.025
-
-        #position of myrmex corners: 
-        # [-0.02, X, -0.02]
-        # [ 0.02, X, -0.02]
-
-        #Mindest veschiebung Differenz der Sensor Diagonalen und halber höhe des Objekts
-        #Maximal halbe Höhe des objekts
-        #Verschiebe objekt entlang seiner Längsachse 
-
-        # FINGERTIP CASE: EE TO GRIPPER CASE /HAND 0.05
-        # min shift --> abs(obj_heihgt/2 - 0.05) 
-       
+            
         obj_axis_n = (obj_axis / np.linalg.norm(obj_axis)) * self.obj_height/2
 
         if self.sensor == 'fingertip':
@@ -456,43 +442,57 @@ class TactileObjectPlacementEnv(gym.Env):
             if None not in self.current_msg.values():
                 break
             
-    def _get_obs(self, return_quat=False):
+    def _get_obs(self, return_quat=False, initial_obs=False):
         
-        current_obs = self.current_msg['franka_state']
-        
-        ee_pos, ee_quat, ee_xyz = self._pose_quat_from_trafo(current_obs.O_T_EE)
-        
-        pose = np.concatenate([ee_pos, ee_quat])
+        valid_obs = False
+        while not valid_obs:
+            current_obs = self.current_msg['franka_state']
+            
+            ee_pos, ee_quat, ee_xyz = self._pose_quat_from_trafo(current_obs.O_T_EE)
+            
+            pose = np.concatenate([ee_pos, ee_quat])
 
-        # ee_obj_dist = np.linalg.norm(ee_pos - obj_pos)
+            joint_positions = np.array(current_obs.q, dtype=np.float64)
+            joint_torques = np.array(current_obs.tau_J, dtype=np.float64)
+            joint_velocities = np.array(current_obs.dq, dtype=np.float64)
+            
+            
+            myrmex_data_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) #/self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
+            #myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
-        joint_positions = np.array(current_obs.q, dtype=np.float64)
-        joint_torques = np.array(current_obs.tau_J, dtype=np.float64)
-        joint_velocities = np.array(current_obs.dq, dtype=np.float64)
-        
+            myrmex_data_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) #/self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
+            
+            if initial_obs:
+                robot_valid = self.observation_space["observation"]["joint_positions"].contains(joint_positions) and self.observation_space["observation"]["ee_pose"].contains(pose)
+                tactile_valid = np.max(myrmex_data_l) > 0
+                valid_obs = robot_valid and tactile_valid
 
-        myrmex_data_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) #/self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
-        #myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
+            else:
+                valid_obs = True
+            
+            if not valid_obs:
+                self._perform_sim_steps(1)
+            
+            #myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
 
-        myrmex_data_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) #/self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
-        #myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
+            # try:
+            #     time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
+            # except:
+            #     time_diff = np.zeros(len(self.current_msg.keys()))
+            #     print("ERROR: could not compute time diff!")
 
-        # try:
-        #     time_diff = np.array([to_msec(self.current_msg[k].header.stamp) - to_msec(self.last_timestamps[k]) for k in self.current_msg.keys()]) # milliseconds
-        # except:
-        #     time_diff = np.zeros(len(self.current_msg.keys()))
-        #     print("ERROR: could not compute time diff!")
 
         observation = {
-                       "ee_pose" : pose, 
-                       "joint_positions" : joint_positions,
-                       "joint_torques" : joint_torques,
-                       "joint_velocities" : joint_velocities,
-                       "myrmex_l" : myrmex_data_l,
-                       "myrmex_r" : myrmex_data_r
+                    "ee_pose" : pose, 
+                    "joint_positions" : joint_positions,
+                    "joint_torques" : joint_torques,
+                    "joint_velocities" : joint_velocities,
+                    "myrmex_l" : myrmex_data_l,
+                    "myrmex_r" : myrmex_data_r
                     #    "time_diff" : time_diff
-                       }
+                    }
 
+            
         if not return_quat:
             return {"observation" : observation}
         else:
@@ -792,7 +792,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
             resp = self.set_gravity(env_id=0, gravity=[0, 0, -9.81])
         
-            self._perform_sim_steps(3)
+            self._perform_sim_steps(10)
             
             if not self._check_object_grip():
                 grasp_success = False
@@ -814,7 +814,7 @@ class TactileObjectPlacementEnv(gym.Env):
         # set object properties
         obj_geom_type = GeomType(value=self.obj_geom_type_value)
         obj_geom_properties = GeomProperties(env_id=0, name="object_geom", type=obj_geom_type, size_0=self.obj_size_0, size_1=self.obj_size_1, size_2=self.obj_size_2, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
-        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=False, set_size=True)
         if not resp.success:
             rospy.logerr("SetGeomProperties:failed to set object parameters")
 
@@ -848,23 +848,23 @@ class TactileObjectPlacementEnv(gym.Env):
         tableheight -= 0.01
         obj_geom_type = GeomType(value=6)
         obj_geom_properties = GeomProperties(env_id=0, name="table_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=tableheight, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
-        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=False, set_size=True)
         if not resp.success:
             rospy.logerr("SetGeomProperties:failed to set object parameters")        
         
         body_state = BodyState(env_id=0, name="table", pose=nparray_to_posestamped(np.array([0.3, 0, tableheight]), np.array([1,0,0,0])), mass=50)
-        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
+        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=False, set_mass=False, reset_qpos=False)
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
 
         obj_geom_type = GeomType(value=6)
         obj_geom_properties = GeomProperties(env_id=0, name="tabletop_geom", type=obj_geom_type, size_0=0.2, size_1=0.5, size_2=0.01, friction_slide=1, friction_spin=0.005, friction_roll=0.0001)
-        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=True, set_size=True)
+        resp = self.set_geom_properties(properties=obj_geom_properties, set_type=True, set_mass=False, set_friction=False, set_size=True)
         if not resp.success:
             rospy.logerr("SetGeomProperties:failed to set object parameters")        
         
         body_state = BodyState(env_id=0, name="tabletop", pose=nparray_to_posestamped(np.array([0.3, 0, tableheight + tableheight + 0.01]), np.array([1,0,0,0])), mass=50)
-        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=True, set_mass=True, reset_qpos=False)
+        resp = self.set_body_state(state=body_state, set_pose=True, set_twist=False, set_mass=False, reset_qpos=False)
         if not resp.success:
             rospy.logerr("SetBodyState: failed to set object pose or object mass")
 
@@ -968,7 +968,7 @@ class TactileObjectPlacementEnv(gym.Env):
                           
                 if regrasp_counter >= 10:
                     break
-
+            
                 
         if not regrasp_counter >= 10:
 
@@ -984,13 +984,7 @@ class TactileObjectPlacementEnv(gym.Env):
         else:
             info = {'info' : {'sampled_gap' : None, 'obj_angle' : None, 'success' : False}}
 
-        #make sure myrmex reading arrived
-        while True:
-            if np.max(np.array(self.current_msg["myrmex_l"].sensors[0].values)) == 0 and self._check_object_grip():
-                self._perform_sim_steps(1)
-            else:
-                break 
-
+    
         observation    = self._get_obs()
         return observation, info 
     
