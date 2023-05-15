@@ -98,7 +98,7 @@ def compute_corner_coords(center, w, l, h, quat):
 class TactileObjectPlacementEnv(gym.Env):
     metadata = {}
 
-    def __init__(self, object_params=dict(), curriculum=False, sensor="fingertip", continuous=False, grid_size=4):
+    def __init__(self, object_params=dict(), curriculum=False, sensor="fingertip", continuous=False, grid_size=4, action_space='full'):
 
         super().__init__()
 
@@ -145,28 +145,33 @@ class TactileObjectPlacementEnv(gym.Env):
 
         self.DISCRETE_ACTIONS = []
 
-        for x in [-1, 1]:
-            self.DISCRETE_ACTIONS.append([0,x,0,0])
-        for z in [1, -1]:
-            self.DISCRETE_ACTIONS.append([z,0,0,0])
-
+        self.action_space_mode = action_space
+        if action_space =='full':
+            for x in [-1, 1]:
+                self.DISCRETE_ACTIONS.append([0,x,0,0])
+            for z in [1, -1]:
+                self.DISCRETE_ACTIONS.append([z,0,0,0])
+            self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
+            self.DISCRETE_ACTIONS.append([0, 0, 0, 0])
+        else:
+            self.DISCRETE_ACTIONS.append([-1,0,0,0])
+            self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
         # for x in [-1, 0, 1]:
         #     for z in [-1, 0, 1]:
         #         self.DISCRETE_ACTIONS.append([z,x,0,0])
                 
-        self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
-        self.DISCRETE_ACTIONS.append([0, 0, 0, 0])
+        
         self.action_space = Discrete(len(self.DISCRETE_ACTIONS))
 
 
         if sensor == 'fingertip': 
-            self.myrmex_max_val = 0.35
+            self.myrmex_max_val = 0.5
             tactile_obs = Box(low=0, high=1, shape=(32,), dtype=np.float64)        
             launch_file = "panda_fingertip.launch"    
             self.num_taxels = 32
 
         elif sensor == 'plate':
-            self.myrmex_max_val = 0.5
+            self.myrmex_max_val = 1.3
             tactile_obs = Box(low=0, high=1, shape=(grid_size*grid_size,), dtype=np.float64)
             launch_file = "panda.launch"
             self.num_taxels = grid_size*grid_size
@@ -361,7 +366,7 @@ class TactileObjectPlacementEnv(gym.Env):
         obj_axis = np.array(rotate_vec(v=[0,0,1], q=py_quat))
             
         obj_axis_n = (obj_axis / np.linalg.norm(obj_axis)) * self.obj_height/2
-
+        
         if self.sensor == 'fingertip':
             
             # 1. compute corner points relative to bject center 
@@ -376,14 +381,18 @@ class TactileObjectPlacementEnv(gym.Env):
             
             if z_shift >= -0.005:
                 # 3.2 compute shift along object axis that shifts z by that amount
-                projected = np.array([obj_axis_n[0], obj_axis_n[1], 0])
-                magnitude = np.linalg.norm(projected)
-
-                theta = math.atan2(projected[1], projected[0])
-                hrztl_shift = z_shift * math.cos(theta)
-
-                min_shift = abs(hrztl_shift * (np.linalg.norm(obj_axis_n) / magnitude))
-       
+                if y_angle == 0:
+                    min_shift = 0.03
+                else:
+                    projected = np.array([obj_axis_n[0], obj_axis_n[1], 0])
+                
+                    magnitude = np.linalg.norm(projected)
+                    
+                    theta = math.atan2(projected[1], projected[0])
+                    hrztl_shift = z_shift * math.cos(theta)
+                    
+                    min_shift = abs(hrztl_shift * (np.linalg.norm(obj_axis_n) / magnitude))
+             
             else: 
                 min_shift = 0
         else:
@@ -396,7 +405,6 @@ class TactileObjectPlacementEnv(gym.Env):
             else:
                 min_shift = 0
 
-        
         ax_shift = np.random.uniform(low=min_shift, high=0.5*self.obj_height)
 
         position -= (obj_axis * ax_shift)
@@ -457,10 +465,11 @@ class TactileObjectPlacementEnv(gym.Env):
             joint_velocities = np.array(current_obs.dq, dtype=np.float64)
             
             
-            myrmex_data_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) #/self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
-            #myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
+            myrmex_data_noise_l = np.array(self.current_msg["myrmex_l"].sensors[0].values) /self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
+            myrmex_data_l = np.clip(myrmex_data_noise_l, a_min=0, a_max=1)
 
-            myrmex_data_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) #/self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
+            myrmex_data_noise_r = np.array(self.current_msg["myrmex_r"].sensors[0].values) /self.myrmex_max_val #+ 0.0000001*np.random.randn(self.num_taxels)
+            myrmex_data_r = np.clip(myrmex_data_noise_r, a_min=0, a_max=1)
             
             if initial_obs:
                 robot_valid = self.observation_space["observation"]["joint_positions"].contains(joint_positions) and self.observation_space["observation"]["ee_pose"].contains(pose)
@@ -652,7 +661,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
     def _compute_reward(self, compute_final_reward=False):
         #object Y-Value in World Frame
-        reward = 0
+        reward = -0.01
         
         info = {'cause' : 0}
         obj_pos = point_to_numpy(self.current_msg['object_pos'].point)
@@ -676,7 +685,7 @@ class TactileObjectPlacementEnv(gym.Env):
                 contact = self.current_msg['object_contact_GT'].value
                  
                 if contact > 0:
-                    
+
                     if self.reward_fn=='close_gap':
                         self.contact_counter += 1
                         if self.contact_counter >= 5:
@@ -695,7 +704,6 @@ class TactileObjectPlacementEnv(gym.Env):
                     if self.reward_fn == 'close_gap':
                         self.contact_counter = 0
                     if compute_final_reward:
-                        
                         reward = -1
 
         return reward, info    
@@ -715,6 +723,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
         done = False
 
+  
         action = self.DISCRETE_ACTIONS[action]
         info = {'cause' : 0}
         if action[-1] == 1:
@@ -722,7 +731,7 @@ class TactileObjectPlacementEnv(gym.Env):
             stop_, smooth_reward, _ = self._compute_twist(0, 0, 0)
             self.twist_pub.publish(stop_)
 
-            self._perform_sim_steps(10)
+            self._perform_sim_steps(1)
             
             reward, info = self._compute_reward(compute_final_reward=True)
             
@@ -750,7 +759,7 @@ class TactileObjectPlacementEnv(gym.Env):
 
             reward , info = self._compute_reward()
 
-        if reward != 0:
+        if reward != -0.01:
             done = True
 
             if action[-1] == 1:
@@ -768,9 +777,13 @@ class TactileObjectPlacementEnv(gym.Env):
                     if stable >= 0.98:
                         reward = 1
                     else:
-                        reward -1
-
+                        if self.action_space_mode=='full':
+                            reward -1
+                        else:
+                            reward /= 2
+                            
         reward += smooth_reward
+
 
         return observation, reward, done, False, info
 
