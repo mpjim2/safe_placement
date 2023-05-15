@@ -355,7 +355,99 @@ class placenet_LSTM(nn.Module):
         q_values = self.output_net(combined_embedding)
         
         return q_values
+
+# class dueling_placenet(nn.Module):
     
+#     def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
+#         super().__init__()
+
+#         if sensor_type == 'plate':
+#             if size == 16:
+#                 self.tactile_ftrs = nn.Sequential(
+#                     Conv2Plus1D(in_channels=2, 
+#                                 out_channels=16,
+#                                 spatial_size=7,
+#                                 temporal_size=5),
+#                     nn.ReLU(),
+#                     Conv2Plus1D(in_channels=16,
+#                                 out_channels=32,
+#                                 spatial_size=5,
+#                                 temporal_size=3),
+#                     nn.ReLU(),
+#                     nn.Flatten(),
+#                     nn.Linear(4608, 128),
+#                     nn.ReLU(),
+#                     nn.Linear(128, 128),
+#                     nn.ReLU()
+#                     )
+#             if size == 4:
+#                 self.tactile_ftrs = nn.Sequential(
+#                     Conv2Plus1D(in_channels=2, 
+#                                 out_channels=16,
+#                                 spatial_size=2,
+#                                 temporal_size=5),
+#                     nn.ReLU(),
+#                     Conv2Plus1D(in_channels=16,
+#                                 out_channels=32,
+#                                 spatial_size=2,
+#                                 temporal_size=3),
+#                     nn.ReLU(),
+#                     nn.Flatten(),
+#                     nn.Linear(512, 128),
+#                     nn.ReLU(),
+#                     nn.Linear(128, 128),
+#                     nn.ReLU()
+#                 )
+#         elif sensor_type =='fingertip':
+            
+#             self.tactile_ftrs = nn.Sequential(
+#                 nn.Conv2d(2, 1, (3, 1), padding=0), 
+#                 nn.ReLU(),
+#                 nn.Conv2d(1, 1, (3, 1), padding=0), 
+#                 nn.ReLU(),
+#                 nn.Flatten(),
+#                 nn.Linear(12, 128),
+#                 nn.ReLU(),
+#                 nn.Linear(128, 128),
+#                 nn.ReLU()
+#                 )
+        
+#         self.pose_embedding = nn.Sequential(
+#             nn.Conv2d(1, 1, (3, 1), padding=0), 
+#             nn.ReLU(),
+#             nn.Conv2d(1, 1, (3, 1), padding=0), 
+#             nn.ReLU(),
+#             nn.Flatten(),
+#             nn.Linear(42,64),
+#             nn.ReLU(),
+#             nn.Linear(64, 64),
+#             nn.ReLU()
+#         )
+
+#         self.advantage_stream = torch.nn.Sequential(
+#             torch.nn.Linear(128+64, 128),
+#             torch.nn.ReLU(),
+#             torch.nn.Linear(128, n_actions)
+#         )
+
+#         self.value_stream = torch.nn.Sequential(
+#             torch.nn.Linear(128*2, 128),
+#             torch.nn.ReLU(),
+#             torch.nn.Linear(128, 1)
+#         )
+
+#     def forward(self, myrmex_data, 
+#                       pose):
+        
+#         combined_embedding = torch.cat([self.tactile_ftrs(myrmex_data), 
+#                                         self.pose_embedding(pose)], dim=1)
+
+#         advantage = self.advantage_stream(combined_embedding)
+#         value     = self.value_stream(combined_embedding)
+        
+#         q_values = value + (advantage - advantage.mean())
+        
+#         return q_values    
 
 class dueling_placenet(nn.Module):
     
@@ -402,65 +494,75 @@ class dueling_placenet(nn.Module):
         elif sensor_type =='fingertip':
             
             self.tactile_ftrs = nn.Sequential(
-                nn.Conv2d(2, 1, (5, 1), padding=0), 
+                nn.Conv2d(2, 1, (3, 1), padding=0), 
+                nn.ReLU(),
+                nn.Conv2d(1, 1, (3, 1), padding=0), 
                 nn.ReLU(),
                 nn.Flatten(),
-                nn.Linear(72, 128),
+                nn.Linear(12, 64),
                 nn.ReLU(),
-                nn.Linear(128, 128),
+                nn.Linear(64, 64),
                 nn.ReLU()
                 )
-            
+        
         self.pose_embedding = nn.Sequential(
-            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
+            nn.ReLU(),
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(42,128),
+            nn.Linear(7,64),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(64, 64),
             nn.ReLU()
         )
 
         self.jp_embedding = nn.Sequential(
-            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
+            nn.ReLU(),
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(42,128),
+            nn.Linear(7,64),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(64, 64),
             nn.ReLU()
         )
         
         self.jv_embedding = nn.Sequential(
-            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
+            nn.ReLU(),
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(42,128),
+            nn.Linear(7,64),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(64, 64),
             nn.ReLU()
         )
         
         self.jt_embedding = nn.Sequential(
-            nn.Conv2d(1, 1, (5, 1), padding=0), 
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
+            nn.ReLU(),
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(42,128),
+            nn.Linear(7,64),
             nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.Linear(64, 64),
             nn.ReLU()
         )
 
         self.advantage_stream = torch.nn.Sequential(
-            torch.nn.Linear(128*5, 128),
+            torch.nn.Linear(64*5, 64),
             torch.nn.ReLU(),
-            torch.nn.Linear(128, n_actions)
+            torch.nn.Linear(64, n_actions)
         )
 
         self.value_stream = torch.nn.Sequential(
-            torch.nn.Linear(128*5, 128),
+            torch.nn.Linear(64*5, 64),
             torch.nn.ReLU(),
-            torch.nn.Linear(128, 1)
+            torch.nn.Linear(64, 1)
         )
 
     def forward(self, myrmex_data, 
@@ -477,6 +579,163 @@ class dueling_placenet(nn.Module):
 
         advantage = self.advantage_stream(combined_embedding)
         value     = self.value_stream(combined_embedding)
+        
+        q_values = value + (advantage - advantage.mean())
+        
+        return q_values
+
+class dueling_placenet_reduced(nn.Module):
+    
+    def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            if size == 16:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=7,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=5,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(4608, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                    )
+            if size == 4:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=2,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=2,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(512, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (3, 1), padding=0), 
+                nn.ReLU(),
+                nn.Conv2d(1, 1, (3, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(72, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        
+        self.advantage_stream = torch.nn.Sequential(
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+        self.value_stream = torch.nn.Sequential(
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 1)
+        )
+
+    def forward(self, myrmex_data):
+        
+        embedding = self.tactile_ftrs(myrmex_data)
+
+        advantage = self.advantage_stream(embedding)
+        value     = self.value_stream(embedding)
+        
+        q_values = value + (advantage - advantage.mean())
+        
+
+class dueling_placenet_reduced(nn.Module):
+    
+    def __init__(self, n_actions, n_timesteps, sensor_type, size) -> None:
+        super().__init__()
+
+        if sensor_type == 'plate':
+            if size == 16:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=7,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=5,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(4608, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                    )
+            if size == 4:
+                self.tactile_ftrs = nn.Sequential(
+                    Conv2Plus1D(in_channels=2, 
+                                out_channels=16,
+                                spatial_size=2,
+                                temporal_size=5),
+                    nn.ReLU(),
+                    Conv2Plus1D(in_channels=16,
+                                out_channels=32,
+                                spatial_size=2,
+                                temporal_size=3),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(512, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU()
+                )
+        elif sensor_type =='fingertip':
+            
+            self.tactile_ftrs = nn.Sequential(
+                nn.Conv2d(2, 1, (3, 1), padding=0), 
+                nn.ReLU(),
+                nn.Conv2d(1, 1, (3, 1), padding=0), 
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(72, 128),
+                nn.ReLU(),
+                nn.Linear(128, 128),
+                nn.ReLU()
+                )
+        
+        self.advantage_stream = torch.nn.Sequential(
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, n_actions)
+        )
+
+        self.value_stream = torch.nn.Sequential(
+            torch.nn.Linear(128, 128),
+            torch.nn.ReLU(),
+            torch.nn.Linear(128, 1)
+        )
+
+    def forward(self, myrmex_data):
+        
+        embedding = self.tactile_ftrs(myrmex_data)
+
+        advantage = self.advantage_stream(embedding)
+        value     = self.value_stream(embedding)
         
         q_values = value + (advantage - advantage.mean())
         
@@ -720,26 +979,20 @@ class placenet_LSTM_reduced(nn.Module):
 
 if __name__=='__main__':
  
-    x = torch.rand((1, 2, 10, 4, 4))
+    x = torch.rand((1, 1, 10, 7))
 
-    tactile_ftrs = tactile_ftrs = nn.Sequential(
-                Conv2Plus1D(in_channels=2, 
-                            out_channels=16,
-                            spatial_size=2,
-                            temporal_size=5),
-                nn.ReLU(),
-                Conv2Plus1D(in_channels=16,
-                            out_channels=32,
-                            spatial_size=2,
-                            temporal_size=3),
-                nn.ReLU(),
-                nn.Flatten(),
-                nn.Linear(512, 128),
-                nn.ReLU(),
-                nn.Linear(128, 128),
-                nn.ReLU()
-                )
+    jp_embedding = nn.Sequential(
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
+            nn.ReLU(),
+            nn.Conv2d(1, 1, (3, 1), padding=0), 
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(42,128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU()
+        )
 
-    y = tactile_ftrs(x)
+    y = jp_embedding(x)
 
     print(y.size())
