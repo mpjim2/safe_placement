@@ -16,7 +16,7 @@ MujocoPlugins:
           topicName: "/myrmex_r",
           updateRate: 50.0,
           visualize: True,
-          include_margin: 0.01,
+          include_margin: 0.01(*),
           method: "weighted",
           sample_resolution: 0.01,
           taxels:
