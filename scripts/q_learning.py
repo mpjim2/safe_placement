@@ -5,12 +5,13 @@ import torchvision.transforms as transforms
 import torchvision
 from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 import DQN
 import sys
 import gym
 import time
-from tactile_object_placement.envs.tactile_placing_env import TactileObjectPlacementEnv
+from tactile_object_placement.envs.tactile_placing_env import TactileObjectPlacementEnv_v2
 
 import numpy as np
 from collections import deque, namedtuple
@@ -22,11 +23,11 @@ import os
 import pickle
 from datetime import datetime
 
+import glob
 import argparse
 
 State = namedtuple('State', 
-                    ('state_ml',
-                     'state_mr', 
+                    ('state_myrmex',
                      'state_ep', 
                      'state_jp', 
                      'state_jt', 
@@ -38,28 +39,21 @@ Transition = namedtuple('Transition',
                          'next_state',
                          'reward'))
 
-def obs_to_input(obs, cur_stack, device):
+State_reduced = namedtuple('State', 
+                    ('state_myrmex',
+                     'state_ep'))
 
-    print(obs["ee_pose"].shape)
-    cur_stack.state_ml.append(torch.from_numpy(obs["myrmex_l"].reshape((1, 16,16))).unsqueeze(0).to(device)) #.type(torch.DoubleTensor)
-    cur_stack.state_mr.append(torch.from_numpy(obs["myrmex_r"].reshape((1, 16,16))).unsqueeze(0).to(device)) #.type(torch.DoubleTensor)
-    cur_stack.state_ep.append(torch.from_numpy(obs["ee_pose"]).unsqueeze(0).to(device))                      #.type(torch.DoubleTensor)
-    cur_stack.state_jp.append(torch.from_numpy(obs["joint_positions"]).unsqueeze(0).to(device))              #.type(torch.DoubleTensor)
-    cur_stack.state_jt.append(torch.from_numpy(obs["joint_torques"]).unsqueeze(0).to(device))                #.type(torch.DoubleTensor)
-    cur_stack.state_jv.append(torch.from_numpy(obs["joint_velocities"]).unsqueeze(0).to(device))             #.type(torch.DoubleTensor)
-    
-    return cur_stack
+State_reduced_2 = namedtuple('State', 
+                    ('state_myrmex',
+                     'state_jt'))
 
-def stack_to_state(state_stack):
-    
-    ml = torch.cat(list(state_stack.state_ml), dim=1) 
-    mr = torch.cat(list(state_stack.state_mr), dim=1)
-    ep = torch.cat(list(state_stack.state_ep), dim=1)
-    jp = torch.cat(list(state_stack.state_jp), dim=1)
-    jt = torch.cat(list(state_stack.state_jt), dim=1)
-    jv = torch.cat(list(state_stack.state_jv), dim=1)
+State_reduced_3 = namedtuple('State', 
+                    ('state_myrmex'))
 
-    return State(ml, mr, ep, jp, jt, jv)
+
+def NormalizeData(data, high, low):
+
+    return (data - low) / (high - low)
 
 class ReplayMemory(object):
 
@@ -71,26 +65,67 @@ class ReplayMemory(object):
         self.memory.append(Transition(*args))
 
     def sample(self, batch_size):
-        if batch_size > len(self.memory):
+        
+        if batch_size >= len(self.memory):
             batch_size = len(self.memory)   
-        return random.sample(self.memory, batch_size)
+            return random.sample(self.memory, batch_size)
+        else: 
+            return random.sample(self.memory, batch_size-1) + [self.memory[-1]]
 
     def __len__(self):
         return len(self.memory)
 
+#### DATA COMES FROM ENV AS : (n_time_steps, datadim) for myrmex : (10, 4) x 2 --turnto-->  (1, 2, 10, 4)
+##  FOR ANY OTHER (10,7) ---> (1, 1, 10, 7) is required
+
 class DQN_Algo():
 
-    def __init__(self, filepath, lr, expl_slope, discount_factor, mem_size, batch_size, n_epochs, tau, n_timesteps):
+    def __init__(self, filepath, lr=1e5, expl_slope=1000, discount_factor=0.95, mem_size=10000, batch_size=128, n_epochs=1000, tau=0.9, n_timesteps=10, episode=0, sensor="plate", global_step=None, architecture='temp_conv', reduced=0, grid_size=16, actionspace='full', eval=False):
 
-        self.env = gym.make('TactileObjectPlacementEnv-v0')
+        self.sensor = sensor
+        self.FILEPATH = filepath 
+        if not eval:
+            time = filepath.split('/')[-2]
+            tb_runname = 'sensor' + sensor + '_Arch' + architecture + '_reduced' +str(reduced) + '_' + time
+        
+        
+        self.env = gym.make('TactileObjectPlacementEnv-v1', continuous=False, sensor=sensor, grid_size=grid_size, action_space=actionspace, timesteps=n_timesteps)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        
+        self.START_EP = episode
         #Policy and target network initilisation
-        self.policy_net = DQN.MAT_based_net(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
-        self.target_net = DQN.MAT_based_net(n_actions=self.env.action_space.n, n_timesteps=n_timesteps).double().to(self.device)
-
-        self.replay_buffer = ReplayMemory(mem_size)
+        if architecture == 'temp_conv':
+            if reduced == 1:
+                self.policy_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+            elif reduced == 0:
+                self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+            elif reduced == 2: 
+                self.policy_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+            elif reduced == 3:
+                self.policy_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+        else:
+            if reduced:
+                self.policy_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict()) 
+            elif reduced == 2:
+                self.policy_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict()) 
+            elif reduced == 3:
+                self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+        
 
         self.EPS_START = 0.9
         self.EPS_END = 0.05
@@ -102,155 +137,355 @@ class DQN_Algo():
 
         self.LEARNING_RATE = lr
 
-        self.loss_fn = nn.SmoothL1Loss()
+        self.loss_fn = nn.MSELoss()
         self.optimizer = torch.optim.AdamW(self.policy_net.parameters(), lr=self.LEARNING_RATE, amsgrad=True)
 
         self.soft_update_weight = tau
-        self.stepcount = 0
+        
+        self.max_ep_steps = 20
 
+        if not global_step is None or eval:
+            self.stepcount=global_step if global_step is not None else 0 
+            #load NN Dictionary
+            self.policy_net.load_state_dict(torch.load(self.FILEPATH + '/Policy_Model'))
+            self.target_net.load_state_dict(torch.load(self.FILEPATH + '/Target_Model'))
+            if not eval:
+                with open(self.FILEPATH + '/exp_buffer.pickle', 'rb') as f:
+                    self.replay_buffer = pickle.load(f)
+        else:
+            self.stepcount = 0
+            
+            self.replay_buffer = ReplayMemory(mem_size)
+
+        self.grid_size = grid_size
+        #curriculum parameters
+        
+        self.I = 0
+        self.step_vals = [11, 23, 33, 38]
+
+        self.gapsize = 0.002
+        self.angle_range = 0.0
+        self.sim_steps = 10
+
+        self.train_avg = 0
+        self.test_avg = 0
+
+        self.reduced = reduced
+        
+        if actionspace == 'full':
+
+            self.reward_fn = 'close_gap'
+        else:
+            self.reward_fn = 'place'
+            
+        if sensor == "fingertip":
+            self.tactile_shape = (1,2,1,4)
+        elif sensor == "plate":
+            self.tactile_shape = (1,2,1,grid_size,grid_size)
+        
         self.n_timesteps = n_timesteps
-        self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_ep=deque([torch.zeros((1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jp=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jt=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                     state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
-
-
-
-
-        self.FILEPATH = filepath 
-        if not os.path.exists(self.FILEPATH):
-            os.makedirs(self.FILEPATH)
-
         #contains rewards & length of episode for every episode
-        self.rewards_ = {'training' : [], 
-                         'testing'  : [] }
+     
 
-        self.ep_lengths_ = {'training' : [],
-                            'testing'  : []}
+        if not eval:
+            self.summary_writer = SummaryWriter('/home/marco/Masterarbeit/Training/AllRuns/TB_logs/' + tb_runname)
 
-        self.done_causes = {'training' : [],
-                           'testing'  : []}
+            self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
+            self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
     
-    def save_checkpoint(self):
-         
-        torch.save(self.policy_net.state_dict(), self.FILEPATH + '/Model')
-       
-        with open(self.FILEPATH + '/Rewards.pickle', 'wb') as file:
-            pickle.dump(self.rewards_, file)
+        self.tactile_test = None
+
+    def obs_to_input(self, obs, device):
+
+        if self.sensor == 'plate':
+            myrmex_r = obs['myrmex_r']
+            myrmex_l = obs['myrmex_l']
+
+            combined = torch.cat([torch.from_numpy(myrmex_r).view(1, 1, self.n_timesteps, 16, 16),
+                                  torch.from_numpy(myrmex_l).view(1, 1, self.n_timesteps, 16, 16)], 
+                                  dim=1).to(device)
+
+            
+        elif self.sensor == 'fingertip':
+            #incoming 
+            myrmex_r = obs['myrmex_r']
+            myrmex_l = obs['myrmex_l']
+
+            combined = torch.cat([torch.from_numpy(myrmex_r).view(1, 1, self.n_timesteps, 4),
+                                  torch.from_numpy(myrmex_l).view(1, 1, self.n_timesteps, 4)], 
+                                  dim=1).to(device)
+
+        pose = torch.from_numpy(obs['ee_pose']).view(1, 1, self.n_timesteps, 7)  
+
+        jp = torch.from_numpy(obs['joint_positions']).view(1, 1, self.n_timesteps, 7)
+        jt = torch.from_numpy(obs['joint_torques']).view(1, 1, self.n_timesteps, 7)
+        jv = torch.from_numpy(obs['joint_velocities']).view(1, 1, self.n_timesteps, 7)
+        state = State(state_myrmex=combined, state_ep=pose, state_jp=jp, state_jt=jt, state_jv=jv)
+
+        return state 
+
+    def _normalize_observation(self, obs):
         
-        with open(self.FILEPATH + '/Ep_length.pickle', 'wb') as file:
-            pickle.dump(self.ep_lengths_, file)
+        normalized = {'observation' : {}}
+        for key in obs['observation']:
+            if not(key == "myrmex_r" or key == 'myrmex_l'):
+                min_ = self.env.spaces[key].high
+                max_ = self.env.spaces[key].low
+                
+                if key == 'ee_pose':
+                    min_ = min_[:3]
+                    max_ = max_[:3]
+
+                    pos  = NormalizeData(obs['observation'][key][:, :3], min_, max_)
+                    quat = obs['observation'][key][:, 3:] 
+
+                    normalized['observation'][key] = np.hstack([pos, quat])
+                else:
+                    normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
         
-        with open(self.FILEPATH + '/done_causes.pickle', 'wb') as file:
-            pickle.dump(self.done_causes, file)
+        normalized['observation']['myrmex_r'] = obs['observation']['myrmex_r']
+        normalized['observation']['myrmex_l'] = obs['observation']['myrmex_l']
+
+        return normalized
+    
+    def save_checkpoint(self, save_buffer=False):
+        
+        torch.save(self.policy_net.state_dict(), self.FILEPATH + 'Policy_Model')
+
+        torch.save(self.target_net.state_dict(), self.FILEPATH +  'Target_Model')       
+
+        if save_buffer:
+            with open(self.FILEPATH + 'exp_buffer.pickle', 'wb') as f:
+                pickle.dump(self.replay_buffer, f)
 
         return 0
     
-    def select_action(self, state):
+    def select_action(self, state, explore=True):
         
+        #if explore:
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)
-        if random.random() >= eps_threshold:
-            action = self.policy_net(*state).max(1)[1].view(1,1)
-        else:
+            #self.summary_writer.add_scalar('exploration/rate', eps_threshold, self.stepcount)
+        
+        if random.random() < eps_threshold and explore:
             action = torch.tensor([[self.env.action_space.sample()]], device=self.device, dtype=torch.long)
-        
+        else:
+            action = self.policy_net(*state).max(1)[1].view(1,1)
         return action
-
-    def test(self):
+    
+    def _restart_env(self):
         
-        obs, _ = self.env.reset()
+        self.env.close()
+        self.env = gym.make('TactileObjectPlacementEnv-v0', continuous=False, sensor=self.sensor)
+
+        return 0
+    
+    def _reset_env(self, options):
+
+        restart_counter = 0
+        success = False
+        while not success:
+            obs, info = self.env.reset(options=options)
+            success = info['info']['success']
+            
+            if not success:
+                print('Resetting Env unsuccessful. Restarting...')
+                self._restart_env()
+                restart_counter += 1
+                if restart_counter >= 5:
+                    self.env.close()
+
+                    raise InterruptedError('Failed to reset Environment!')
+                    break
+        return obs, info
+
+    def test(self, log_actions=False, test_action=None, evaluate=False):
+        
+        obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : True, 'angle_range' : self.angle_range, 'sim_steps' : self.sim_steps, 'reward_fn' :self.reward_fn})
+
+        obs = self._normalize_observation(obs)
+        
+        state = self.obs_to_input(obs["observation"], device=self.device)
         done = False
 
-        #ReInitialize cur_state_stack
-        self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                        state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                        state_ep=deque([torch.zeros((1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                        state_jp=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                        state_jt=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                        state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
-
-        self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-        state = stack_to_state(self.cur_state_stack)
-
+        if evaluate:
+            qvals = []
+            RIGHT = []
+            LEFT  = []
+        cumulative_reward = 0
         for step in count():
             #experience sample: state, action, reward,  state+1
-            
-            action = self.select_action(state)
-            
-            obs, reward, done, _ , info = self.env.step(action)
+            if evaluate:
+                q = self.policy_net(*state).detach().numpy()
+                qvals.append(q[0])
+            if test_action is None:  
+                action = self.select_action(state, explore=False)
+            else:
+                action = torch.tensor([[test_action]], device=self.device, dtype=torch.long)
 
+            if log_actions:
+                a_vec = self.env.DISCRETE_ACTIONS[action]
+
+                self.summary_writer.add_scalar("test/actions/Z_translation", a_vec[0], self.stepcount+step)
+                self.summary_writer.add_scalar("test/actions/X_rotation", a_vec[1], self.stepcount+step)
+
+
+            obs, reward, done, _ , info = self.env.step(action)
+            obs = self._normalize_observation(obs)
+            
+            if evaluate:
+                L = obs['observation']['myrmex_l']
+                R = obs['observation']['myrmex_r']
+
+                for l in L:
+                    LEFT.append(l)
+
+                for r in R:
+                    RIGHT.append(r)
+
+            cumulative_reward += reward
             reward = torch.tensor([reward])
-            if not done:
-                self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-                next_state = stack_to_state(self.cur_state_stack)
+            if not done and step < self.max_ep_steps:
+                next_state = self.obs_to_input(obs["observation"], device=self.device)
             else:
                 next_state = None
 
             state = next_state
-
             if done:
-                self.done_causes['testing'] = info['cause']
                 break
-
-        self.rewards_['testing'].append((float(reward), self.stepcount))
-        self.ep_lengths_['testing'].append(step)
+            if step >= self.max_ep_steps:
+                reward = -1
+                break
+            
+        print('Finished Evaluation! Reward: ', float(reward), " Steps until Done: ", step+1, ' Termination Cause: ' , info['cause'])
         
+        if evaluate:
+            return qvals, (LEFT, RIGHT)
+        else:
+            return reward, cumulative_reward, step+1
 
     def train(self):
         
-        for episode in range(self.N_EPOCHS):
-        
-            obs, info = self.env.reset()
+        for episode in range(self.START_EP+1, self.START_EP + self.N_EPOCHS+1):
+            
+            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'sim_steps' : self.sim_steps, 'reward_fn' : self.reward_fn})
+            obs = self._normalize_observation(obs)
+
             done = False
 
+            self.summary_writer.add_scalar('curriculum/sampled_gap', info['info']['sampled_gap'], episode)
+            self.summary_writer.add_scalar('curriculum/sampled_angle', info['info']['obj_angle'], episode)
+            
             #ReInitialize cur_state_stack
-            self.cur_state_stack = State(state_ml=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_mr=deque([torch.zeros((1,1,16,16), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_ep=deque([torch.zeros((1, 6), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jp=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jt=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps),
-                                         state_jv=deque([torch.zeros((1, 7), dtype=torch.double, device=self.device) for _ in range(self.n_timesteps)], maxlen=self.n_timesteps))
 
-            self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-            state = stack_to_state(self.cur_state_stack)
+            state = self.obs_to_input(obs["observation"], device=self.device)
 
+            if episode == 1:
+                self.summary_writer.add_graph(self.policy_net, state)
+
+            pre_buffer = []
+            cumulative_reward = 0
             for step in count():
+
                 #experience sample: state, action, reward,  state+1
-                action = self.select_action(state)
+                if step < self.max_ep_steps:
+                    action = self.select_action(state)
+                else:
+                    action = torch.tensor([[self.env.action_space.n - 1]], device=self.device, dtype=torch.long)
                 
                 obs, reward, done, _ , info = self.env.step(action)
+                obs = self._normalize_observation(obs)
 
+                cumulative_reward += reward
                 reward = torch.tensor([reward])
-                if not done:
-                    self.cur_state_stack = obs_to_input(obs["observation"], self.cur_state_stack, device=self.device)
-                    next_state = stack_to_state(self.cur_state_stack)
+                if not done and step < self.max_ep_steps:
+                    next_state = self.obs_to_input(obs["observation"], device=self.device)
                 else:
                     next_state = None
-
-                self.replay_buffer.push(state, action, next_state, reward)
+                
+                pre_buffer.append((state, action, next_state, reward))
+                #self.replay_buffer.push(state, action, next_state, reward)
 
                 state = next_state
 
-                self.optimize()
-                self.stepcount += 1
-
+               
                 if done:
-                    print(info)
-                    self.done_causes['training'] = info['cause']
+                    if reward > 0:
+                        if step >= self.step_vals[self.I]:
+                            self.summary_writer.add_scalar('Reward/train/final', reward, episode)
+                            self.summary_writer.add_scalar('Ep_length/train', step+1, episode)
+                            self.summary_writer.add_scalar('Reward/train/Cumulative', cumulative_reward, episode)
+                            for transition in pre_buffer:
+                                self.replay_buffer.push(*transition)
+                                self.optimize()
+                                self.stepcount += 1    
+                    else:
+                        self.summary_writer.add_scalar('Reward/train/final', reward, episode)
+                        self.summary_writer.add_scalar('Ep_length/train', step+1, episode)    
+                        self.summary_writer.add_scalar('Reward/train/Cumulative', cumulative_reward, episode)  
+                        for transition in pre_buffer:
+                            self.replay_buffer.push(*transition)
+                            self.optimize()
+                            self.stepcount += 1
                     break
             
-            print('Episode ', episode, ' done after ', step,  ' Steps ! reward: ', float(reward), ' Randomness: ', (self.EPS_END + (self.EPS_START - self.EPS_END) * math.exp(-1. * self.stepcount / self.EPS_DECAY)))
-            
-            self.rewards_['training'].append((float(reward), self.stepcount))
-            self.ep_lengths_['training'].append(step)
-            
-            if episode % 5 == 0:
-                self.test()
-                self.save_checkpoint()
+            print('Episode ', episode, ' done after ', step+1,  ' Steps ! reward: ', float(reward))
 
-        self.save_checkpoint()
+            if episode % 100 == 0:
+                
+                R = []
+                S = []
+                C = []
+                #3 Test episodes 
+   
+                for i in range(3):
+                    r, c, s = self.test(log_actions = i==0)
+                    R.append(float(r))
+                    S.append(int(s))
+                    C.append(float(c))
+                    self.summary_writer.add_scalar('Reward/test/final', r, episode+i)
+                    self.summary_writer.add_scalar('Ep_length/test/', s, episode+i)
+                    
+                mr = np.mean(R)
+                ms = np.mean(S)
+                mc = np.mean(C)
+
+                self.summary_writer.add_scalar('Reward/test/mean', mr, episode)
+                self.summary_writer.add_scalar('Reward/test/meanCumulative/', mc, episode)
+                
+                #Curriculum: first increase gapsize then increase angle range
+                if self.sim_steps > 10:
+                    if mr >= 0:   
+                        self.sim_steps -= 10
+                        if self.sim_steps < 10:
+                            self.sim_steps = 10
+            
+                elif self.gapsize < 0.015:
+                    if mr >= 0:   
+                        self.gapsize += 0.005
+                        if self.I < len(self.step_vals)-1:
+                            self.I += 1
+                        if self.gapsize > 0.015:
+                            self.gapsize = 0.015
+                            #   self.reward_fn = 'place'
+                        if self.max_ep_steps < 150:
+                            self.max_ep_steps += 11
+                # else:
+                #     if mr >= 0.9:
+                #         self.angle_range += 0.05
+                #         if self.angle_range > np.pi/2:
+                #             self.angle_range = np.pi/2
+                #         # if self.max_ep_steps < 1000:
+                #         #     self.max_ep_steps += 50
+                
+                self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, episode)
+                #only increase angle difficulty if the reward is high enough
+                    
+                self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, episode)
+                
+                self.save_checkpoint(save_buffer=True)
+
+
+        self.save_checkpoint(save_buffer=True)
         self.env.close()
 
     def optimize(self):
@@ -260,7 +495,7 @@ class DQN_Algo():
         batch = Transition(*zip(*transitions))
 
         state_batch = State(*zip(*batch.state))
-
+       
         action_batch = torch.cat(batch.action).to(self.device)
         reward_batch = torch.cat(batch.reward).to(self.device)
 
@@ -268,18 +503,39 @@ class DQN_Algo():
                                     batch.next_state)), device=self.device, dtype=torch.bool)
 
         
-        state_action_values = self.policy_net(*(torch.cat(e) for e in state_batch)).gather(1, action_batch)
-
+        vals = self.policy_net(*(torch.cat(e) for e in state_batch))
+        state_action_values = vals.gather(1, action_batch)
+        
         #2. Compute Target Q-Values
+        #Double DQN: Decouble action selection and value estimation
+        #Use policy network to choose best action
+        #use target network to estimate value of that action 
         next_state_values = torch.zeros(action_batch.size()[0], device=self.device, dtype=torch.double)
         if any(non_final_mask):
+            
             non_final_next_states = State(*zip(*[s for s in batch.next_state if s is not None]))
+            
             with torch.no_grad():
-                next_state_values[non_final_mask] = self.target_net(*(torch.cat(e) for e in non_final_next_states)).max(1)[0]
+                #simple max of q vals. Target net is used for selection and evaluation
+                # next_state_values[non_final_mask] = self.target_net(*(torch.cat(e) for e in non_final_next_states)).max(1)[0]
+                
+                #double DQN: Select action using policy net; evaluate using target net
+                next_state_values_ = self.target_net(*(torch.cat(e) for e in non_final_next_states))        
+                next_state_vs = self.policy_net(*(torch.cat(e) for e in non_final_next_states))
+                next_state_actions = torch.argmax(next_state_vs, dim=1).unsqueeze(dim=1)
+
+                next_state_values[non_final_mask] = next_state_values_.gather(1, next_state_actions).squeeze()
 
         expected_state_action_values = (next_state_values * self.discount_factor) + reward_batch
 
         loss = self.loss_fn(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        mean_Q_Vals = torch.mean(vals, dim=0)
+        self.summary_writer.add_scalar('Loss/train', loss, self.stepcount)
+
+        for i, q in enumerate(mean_Q_Vals):
+            label = 'Q_values/policy/action_' + str(i)
+            self.summary_writer.add_scalar(label, q, self.stepcount)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -305,28 +561,68 @@ if __name__=='__main__':
     parser.add_argument('--nepochs', required=False, help='int', default='5')
     parser.add_argument('--lr', required=False, help='float', default="1e-4")
     parser.add_argument('--savedir', required=False, help='Specify the directory where trained models should be saved')
+    parser.add_argument('--mem_size', required=False, default='7500')
+    parser.add_argument('--expl_slope', required=False, default='50000')
+    parser.add_argument('--sensor', required=False, default='plate')
+    parser.add_argument('--architecture', required=False, default='temp_conv')
+    parser.add_argument('--reduced_state', required=False, default='0')
+    parser.add_argument('--continue_', required=False, default='0')
+    parser.add_argument('--global_step', required=False, default='0')
+    parser.add_argument('--episode', required=False, default='0')    
+    parser.add_argument('--actionspace', required=False, default='full')
     opt = parser.parse_args()
 
-
+    sensor = opt.sensor
+    expl_slope = int(opt.expl_slope)
+    mem_size = int(opt.mem_size)
     batchsize = int(opt.batchsize)
     nepochs = int(opt.nepochs)
     lr = float(opt.lr)
+    reduced = int(opt.reduced_state)
+    global_step = int(opt.global_step)
+    episode = int(opt.episode)
+    actionspace = opt.actionspace
+    continue_ = bool(int(opt.continue_))
 
-    time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
-
-    if opt.savedir is None:
-        filepath = '/home/marco/Masterarbeit/Training/' + time_string + '/'
+    if not continue_:
+        time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
+        global_step = None
+        if opt.savedir is None:
+            filepath = '/homes/mjimenezhaertel/Masterarbeit/Training/' + time_string + '/'
+        else:
+            filepath = opt.savedir + time_string + '/'
+        
+        if not os.path.exists(filepath):
+            os.makedirs(filepath)
+        with open(filepath + 'options.txt', 'w') as f:
+            f.write("sensor: " + sensor + "\n")
+            f.write("expl_slope: " + opt.expl_slope + "\n")
+            f.write("mem_size: " + opt.mem_size + "\n")
+            f.write("batchsize: " + opt.batchsize + "\n")
+            f.write("nepochs: " + opt.nepochs + "\n")
+            f.write("lr: " + opt.lr + "\n")
+            f.write("reduced: " + opt.reduced_state + "\n")
+            f.write("architecture: " + opt.architecture)
     else:
-        filepath = opt.savedir + time_string + '/'
+        filepath = opt.savedir   
+        
+
 
     algo = DQN_Algo(filepath=filepath,
                     lr=lr, 
-                    expl_slope=10000, 
+                    expl_slope=expl_slope, 
                     discount_factor=0.9, 
-                    mem_size=5000, 
+                    mem_size=mem_size, 
                     batch_size=batchsize, 
                     n_epochs=nepochs, 
-                    tau=0.9,
-                    n_timesteps=20)
+                    tau=0.95,
+                    n_timesteps=10,
+                    sensor=sensor,
+                    global_step=global_step,
+                    architecture=opt.architecture,
+                    reduced=reduced,
+                    episode = episode,
+                    actionspace=actionspace)
 
     algo.train()    
+    algo.summary_writer.close()
