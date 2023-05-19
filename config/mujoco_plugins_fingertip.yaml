@@ -15,10 +15,10 @@ MujocoPlugins:
           geomName: "rightfinger_geom",
           topicName: "/myrmex_r",
           updateRate: 50.0,
-          visualize: True,
-          include_margin: 0.003,
+          visualize: False,
+          include_margin: 0.002,
           method: "weighted",
-          sample_resolution: 0.005,
+          sample_resolution: 0.001,
           taxels:
             [
                 [ -0.006998929999999995 , -0.0050769000000000005 , 0.001550300000000001 ] ,
@@ -64,10 +64,10 @@ MujocoPlugins:
           geomName: "leftfinger_geom",
           topicName: "/myrmex_l",
           updateRate: 50.0,
-          visualize: True,
-          include_margin: 0.003,
+          visualize: False,
+          include_margin: 0.002,
           method: "weighted",
-          sample_resolution: 0.005,
+          sample_resolution: 0.001,
           taxels:
             [
               [ -0.006998929999999995 , -0.0050769000000000005 , 0.001550300000000001 ] ,
