@@ -26,8 +26,8 @@
         <!-- <numeric name="cs::sphere_geom" data="0 1.0 0.4 0.3 0.3"/> -->
                  
 
-		<numeric name="cs::leftfinger_geom"  data="1e5 1 0 0.7 0.5"/>
-        <numeric name="cs::rightfinger_geom" data="1e5 1 0 0.7 0.5"/>
+		<numeric name="cs::leftfinger_geom"  data="1000 2 0 0.7 0.5"/>
+        <numeric name="cs::rightfinger_geom" data="1000 2 0 0.7 0.5"/>
 		<!---<numeric name="cs::myrmex_foam" data="5e4 5.0 0 0.3 0.3"/> -->
 	</custom>
 
