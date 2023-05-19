@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+
+  <arg name="use_sim_time"
+    default="true" />  
+  <arg name="modelfile"
+    default="$(find safe_placement)/assets/parameter_test_world.xml" />
+
+  <rosparam file="$(find safe_placement)/config/parameter_test.yaml"
+    subst_value="true" />
+
+  <include file="$(find mujoco_ros)/launch/launch_server.launch" pass_all_args="true" >
+    <arg name="modelfile" type="str"  value="$(arg modelfile)" />
+  </include>
+</launch>

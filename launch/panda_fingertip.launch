@@ -17,12 +17,12 @@
   <arg name="interactive_marker" default="$(eval arg('controller') == 'cartesian_impedance_example_controller')" doc="Should the interactive marker node be started?" />
   <arg name="ns" default="" />
   <arg name="initial_joint_states" default="$(find safe_placement)/config/joint_states.yaml" doc="Location of param file containing the initial joint states" />
-  <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins_fingertip.yaml" doc="Location of param file containing the mujoco plugin config" />
+  <arg name="mujoco_plugin_config" default="$(find safe_placement)/config/mujoco_plugins_moded_fingertips.yaml" doc="Location of param file containing the mujoco plugin config" />
   <arg name="use_sim_time" default="false" doc="should mujoco publish its simulation time as ros time?"/>
   <arg name="wait_for_xml" default="false" doc="Should mujoco_ros wait for an xml in the parameter server?" />
   <arg name="debug" default="false" doc="Should mujoco_ros be run in gdb?" />
   <arg name="profile" default="false" doc="Should mujoco_ros be profiled?" />
-  <arg name="realtime" default="1.0" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
+  <arg name="realtime" default="-1.0" doc="Fraction of desired realtime (0,1]. -1 to run as fast as possible" />
   <arg name="render_offscreen" default="false" doc="Should camera streams be rendered and published?" />
   <arg name="use_fingertips" default="false" doc="Should Shadowhandfingertips be mounted to the gripper fingers?" />
   <arg name="no_x" default="true" />
@@ -42,7 +42,7 @@
   <param name="/use_sim_time" value="$(arg use_sim_time)"/>
 
   <param name="robot_description"
-         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_myrmex.urdf.xacro
+         command="xacro $(find safe_placement)/assets/urdf/panda_gripper_s.urdf.xacro
                   gazebo:=true
                   hand:=$(arg load_gripper)
                   arm_id:=$(arg arm_id)
@@ -50,6 +50,8 @@
                   rpy:='$(arg roll) $(arg pitch) $(arg yaw)'
                   $(arg xacro_args)">
   </param>
+
+
 
   <rosparam file="$(find safe_placement)/config/franka_hw_sim.yaml" subst_value="true" />
   <rosparam file="$(find safe_placement)/config/sim_controllers.yaml" subst_value="true" />
