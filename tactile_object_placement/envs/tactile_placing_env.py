@@ -1064,17 +1064,24 @@ class TactileObjectPlacementEnv_v2(gym.Env):
 
         self.action_space_mode = action_space
         if action_space =='full':
+            self.DISCRETE_ACTIONS.append([-1, 0, 0 ,0])
             for x in [-1, 1]:
                 self.DISCRETE_ACTIONS.append([0,x,0,0])
-            for z in [1, -1]:
-                self.DISCRETE_ACTIONS.append([z,0,0,0])
-            self.DISCRETE_ACTIONS.append([0, 0, 0, 0])
-            self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
-        else:
+            # for z in [1, -1]:
+            #     self.DISCRETE_ACTIONS.append([z,0,0,0])
+            self.DISCRETE_ACTIONS.append([ 0, 0, 0, 0])
+            self.DISCRETE_ACTIONS.append([ 0, 0, 0, 1])
+        elif action_space=='reduced':
             self.DISCRETE_ACTIONS.append([-1,0,0,0])
             # self.DISCRETE_ACTIONS.append([0, 0, 0, 0])
             self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
-
+        elif action_space == 'composite':
+            self.DISCRETE_ACTIONS.append([-1, 0, 0 ,0])
+            for x in [-1, 1]:
+                self.DISCRETE_ACTIONS.append([ 0, x, 0, 0])
+                self.DISCRETE_ACTIONS.append([-1, x, 0, 0])
+            self.DISCRETE_ACTIONS.append([0, 0, 0, 0])
+            self.DISCRETE_ACTIONS.append([0, 0, 0, 1])
         # for x in [-1, 0, 1]:
         #     for z in [-1, 0, 1]:
         #         self.DISCRETE_ACTIONS.append([z,x,0,0])
@@ -1090,7 +1097,7 @@ class TactileObjectPlacementEnv_v2(gym.Env):
             self.num_taxels = 4
 
         elif sensor == 'plate':
-            self.myrmex_max_val = 1.3
+            self.myrmex_max_val = 0.06
             tactile_obs = Box(low=0, high=1, shape=(grid_size*grid_size,), dtype=np.float64)
             launch_file = "panda.launch"
             self.num_taxels = grid_size*grid_size
@@ -1353,8 +1360,9 @@ class TactileObjectPlacementEnv_v2(gym.Env):
             else:
                 min_shift = 0
 
-        ax_shift = np.random.uniform(low=min_shift, high=0.5*self.obj_height)
-
+        # ax_shift = np.random.uniform(low=min_shift, high=0.5*self.obj_height)
+        ax_shift = 0.5*self.obj_height
+        # ax_shift = 1
         position -= (obj_axis * ax_shift)
 
         return position, quat, y_angle
@@ -1587,8 +1595,7 @@ class TactileObjectPlacementEnv_v2(gym.Env):
         if self._check_object_grip(obj_pos) == False:
             reward = -1
             info['cause'] = 'lostObject'
-        
-                
+          
         else:
 
             if compute_final_reward or self.reward_fn=='close_gap':
@@ -1627,12 +1634,10 @@ class TactileObjectPlacementEnv_v2(gym.Env):
             rospy.logerr("Step action failed")
         # rospy.rostime.wallsleep(0.1)
 
-   
     def step(self, action):
 
         done = False
 
-  
         action = self.DISCRETE_ACTIONS[action]
         info = {'cause' : 0}
         if action[-1] == 1:
@@ -1683,19 +1688,19 @@ class TactileObjectPlacementEnv_v2(gym.Env):
                 if reward > 0:
                     stable, _ = self._compute_reward(compute_final_reward=True)
 
-                    if stable >= 0.98:
-                        reward = 1
-                    else:
-                        if self.action_space_mode=='full':
-                            reward -1
+                    if stable >= 0.7:
+                        if reward >= 0.999:
+                            reward = stable
                         else:
-                            reward /= 2
+                            reward /= 3
+                    else:
+                        reward -1
+
                             
         reward += smooth_reward
 
 
         return observation, reward, done, False, info
-
 
     def _initial_grasp(self, testing=False):
         open = False
@@ -1748,7 +1753,6 @@ class TactileObjectPlacementEnv_v2(gym.Env):
 
         return obj_pos, obj_quat, angle
     
-
     def _franka_state_callback(self, msg):
         topic = msg._connection_header["topic"]
 
@@ -1773,7 +1777,6 @@ class TactileObjectPlacementEnv_v2(gym.Env):
             self.current_msg["joint_torques"].append(joint_torques)
             self.current_msg["joint_velocities"].append(joint_velocities)
             self.current_msg["ee_pose"].append(pose)
-
          
     def _new_msg_callback(self, msg):
         topic = msg._connection_header["topic"]
@@ -1809,8 +1812,7 @@ class TactileObjectPlacementEnv_v2(gym.Env):
                 self.current_msg[key[0]] = msg
             if key[0] == 'object_quat':
                 self.current_msg[key[0]] = msg
-
-    
+ 
     def _set_table_params(self, tableheight):
         
         tableheight -= 0.01
@@ -1880,7 +1882,6 @@ class TactileObjectPlacementEnv_v2(gym.Env):
         #reset step counter
         return 0
     
-
     def _reset_robot(self):
 
         twist, _, _ = self._compute_twist(0, 0, 0)
@@ -1969,8 +1970,9 @@ class TactileObjectPlacementEnv_v2(gym.Env):
             info = {'info' : {'sampled_gap' : gap, 'obj_angle' : angle, 'success' : True}}
         else:
             info = {'info' : {'sampled_gap' : None, 'obj_angle' : None, 'success' : False}}
-
-        # self._perform_sim_steps(10)
+        twist, _, _ = self._compute_twist(0, 0, 0)
+        self.twist_pub.publish(twist)
+        self._perform_sim_steps(50)
         observation    = self._get_obs()
         return observation, info 
     

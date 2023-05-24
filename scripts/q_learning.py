@@ -53,7 +53,7 @@ State_reduced_3 = namedtuple('State',
 
 def NormalizeData(data, high, low):
 
-    return (data - low) / (high - low)
+    return (2 * ((data - low) / (high - low))) -1
 
 class ReplayMemory(object):
 
@@ -89,7 +89,7 @@ class DQN_Algo():
             tb_runname = 'sensor' + sensor + '_Arch' + architecture + '_reduced' +str(reduced) + '_' + time
         
         
-        self.env = gym.make('TactileObjectPlacementEnv-v1', continuous=False, sensor=sensor, grid_size=grid_size, action_space=actionspace, timesteps=n_timesteps)
+        self.env = gym.make('TactileObjectPlacementEnv-v1', continuous=True, sensor=sensor, grid_size=grid_size, action_space=actionspace, timesteps=n_timesteps)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -97,36 +97,27 @@ class DQN_Algo():
         #Policy and target network initilisation
         if architecture == 'temp_conv':
             if reduced == 1:
-                self.policy_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.placenet_v2_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.policy_net = DQN.dueling_placenet_TacTorqRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet_TacTorqRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 0:
                 self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 2: 
-                self.policy_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.placenet_v3_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.policy_net = DQN.dueling_placenet_TacRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet_TacRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 3:
                 self.policy_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
-        else:
-            if reduced:
-                self.policy_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.placenet_LSTM_reduced(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net.load_state_dict(self.policy_net.state_dict()) 
-            elif reduced == 2:
-                self.policy_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.placenet_LSTM(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net.load_state_dict(self.policy_net.state_dict()) 
-            elif reduced == 3:
-                self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+            elif reduced == 4:
+                self.policy_net = DQN.dueling_placenet_TacTorque(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.target_net = DQN.dueling_placenet_TacTorque(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
+            
         
-
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = expl_slope
@@ -138,11 +129,12 @@ class DQN_Algo():
         self.LEARNING_RATE = lr
 
         self.loss_fn = nn.MSELoss()
-        self.optimizer = torch.optim.AdamW(self.policy_net.parameters(), lr=self.LEARNING_RATE, amsgrad=True)
+        self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.LEARNING_RATE, amsgrad=False)
+        # self.optimizer = torch.optim.AdamW(self.policy_net.parameters(), lr=self.LEARNING_RATE, amsgrad=True)
 
         self.soft_update_weight = tau
         
-        self.max_ep_steps = 20
+        self.max_ep_steps = 31
 
         if not global_step is None or eval:
             self.stepcount=global_step if global_step is not None else 0 
@@ -164,8 +156,13 @@ class DQN_Algo():
         self.step_vals = [11, 23, 33, 38]
 
         self.gapsize = 0.002
-        self.angle_range = 0.0
-        self.sim_steps = 10
+
+        if actionspace == 'reduced':
+            self.angle_range = 0.0
+        elif actionspace =='full':
+            self.angle_range = 0.175
+
+        self.sim_steps = 50
 
         self.train_avg = 0
         self.test_avg = 0
@@ -188,7 +185,7 @@ class DQN_Algo():
      
 
         if not eval:
-            self.summary_writer = SummaryWriter('/home/marco/Masterarbeit/Training/AllRuns/TB_logs/' + tb_runname)
+            self.summary_writer = SummaryWriter('/home/marco/Masterarbeit/Training/AllRuns/TB_logs/Experiments_FinallyWorking/' + tb_runname)
 
             self.summary_writer.add_scalar('curriculum/max_gap', self.gapsize, self.stepcount)
             self.summary_writer.add_scalar('curriculum/angle_range', self.angle_range, self.stepcount)
@@ -215,7 +212,7 @@ class DQN_Algo():
                                   torch.from_numpy(myrmex_l).view(1, 1, self.n_timesteps, 4)], 
                                   dim=1).to(device)
 
-        pose = torch.from_numpy(obs['ee_pose']).view(1, 1, self.n_timesteps, 7)  
+        pose = torch.from_numpy(obs['ee_pose']).view(1, 1, self.n_timesteps, 4)  
 
         jp = torch.from_numpy(obs['joint_positions']).view(1, 1, self.n_timesteps, 7)
         jt = torch.from_numpy(obs['joint_torques']).view(1, 1, self.n_timesteps, 7)
@@ -236,10 +233,10 @@ class DQN_Algo():
                     min_ = min_[:3]
                     max_ = max_[:3]
 
-                    pos  = NormalizeData(obs['observation'][key][:, :3], min_, max_)
+                    # pos  = NormalizeData(obs['observation'][key][:, :3], min_, max_)
                     quat = obs['observation'][key][:, 3:] 
 
-                    normalized['observation'][key] = np.hstack([pos, quat])
+                    normalized['observation'][key] = quat
                 else:
                     normalized['observation'][key] = NormalizeData(obs['observation'][key], min_, max_)
         
@@ -322,6 +319,7 @@ class DQN_Algo():
             else:
                 action = torch.tensor([[test_action]], device=self.device, dtype=torch.long)
 
+            print(self.env.DISCRETE_ACTIONS[action])
             if log_actions:
                 a_vec = self.env.DISCRETE_ACTIONS[action]
 
@@ -387,21 +385,22 @@ class DQN_Algo():
             for step in count():
 
                 #experience sample: state, action, reward,  state+1
-                if step < self.max_ep_steps:
-                    action = self.select_action(state)
-                else:
+                if step >= self.max_ep_steps:
                     action = torch.tensor([[self.env.action_space.n - 1]], device=self.device, dtype=torch.long)
-                
+                else:
+                    action = self.select_action(state)
+                         
                 obs, reward, done, _ , info = self.env.step(action)
                 obs = self._normalize_observation(obs)
 
                 cumulative_reward += reward
-                reward = torch.tensor([reward])
+                
                 if not done and step < self.max_ep_steps:
                     next_state = self.obs_to_input(obs["observation"], device=self.device)
                 else:
                     next_state = None
                 
+                reward = torch.tensor([reward])
                 pre_buffer.append((state, action, next_state, reward))
                 #self.replay_buffer.push(state, action, next_state, reward)
 
@@ -410,7 +409,7 @@ class DQN_Algo():
                
                 if done:
                     if reward > 0:
-                        if step >= self.step_vals[self.I]:
+                        if step >= (self.step_vals[self.I] / (self.sim_steps/10)):
                             self.summary_writer.add_scalar('Reward/train/final', reward, episode)
                             self.summary_writer.add_scalar('Ep_length/train', step+1, episode)
                             self.summary_writer.add_scalar('Reward/train/Cumulative', cumulative_reward, episode)
@@ -466,9 +465,9 @@ class DQN_Algo():
                             self.I += 1
                         if self.gapsize > 0.015:
                             self.gapsize = 0.015
-                            #   self.reward_fn = 'place'
+                            self.reward_fn = 'place'
                         if self.max_ep_steps < 150:
-                            self.max_ep_steps += 11
+                            self.max_ep_steps = self.step_vals[self.I] + 20
                 # else:
                 #     if mr >= 0.9:
                 #         self.angle_range += 0.05
