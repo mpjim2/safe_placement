@@ -24,8 +24,8 @@
         <numeric name="cs::ApplyContactSurfaceForces" data="0"/>
 		<numeric name="cs::object_geom" data="0 1.0 0.4 0.3 0.3"/>
 
-		<numeric name="cs::myrmex_foam_right" data="1e3 10 0 0.3 0.3"/>
-        <numeric name="cs::myrmex_foam_left"  data="1e3 10 0 0.3 0.3"/>
+		<numeric name="cs::myrmex_foam_right" data="1e3 2 0 0.3 0.3"/>
+        <numeric name="cs::myrmex_foam_left"  data="1e3 2 0 0.3 0.3"/>
 		<!---<numeric name="cs::myrmex_foam" data="5e4 5.0 0 0.3 0.3"/> -->
 	</custom>
 
