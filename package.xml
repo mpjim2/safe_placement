@@ -34,6 +34,11 @@
   <depend>franka_msgs</depend>
   <depend>franka_gripper</depend>
   <depend>franka_example_controllers</depend>
+  <depend>franka_ros_mujoco</depend>
+  <depend>mujoco_ros_pkgs</depend>
+  <depend>mujoco_contact_surfaces</depend>
+  <depend>tactile_toolbox</depend>
+
 
   <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
