@@ -90,7 +90,26 @@ class ReplayMemory(object):
 
 class DQN_Algo():
 
-    def __init__(self, filepath, lr=1e5, expl_slope=1000, discount_factor=0.95, mem_size=10000, batch_size=128, n_epochs=1000, tau=0.9, n_timesteps=10, episode=0, sensor="plate", global_step=None, architecture='temp_conv', reduced=0, grid_size=16, actionspace='full', eval=False, pitch_only=False):
+    def __init__(self, 
+                 filepath, 
+                 lr=1e5, 
+                 expl_slope=1000, 
+                 discount_factor=0.95, 
+                 mem_size=10000, 
+                 batch_size=128, 
+                 n_epochs=1000, 
+                 tau=0.9, 
+                 n_timesteps=10, 
+                 episode=0, 
+                 sensor="plate", 
+                 global_step=None, 
+                 architecture='temp_conv', 
+                 reduced=0, 
+                 grid_size=16, 
+                 actionspace='full', 
+                 eval=False, 
+                 pitch_only=False,
+                 layersize=128):
         
         self.pitch_only = pitch_only
         self.sensor = sensor
@@ -108,20 +127,20 @@ class DQN_Algo():
         #Policy and target network initilisation
         if architecture == 'temp_conv':
             if reduced == 1:
-                self.policy_net = DQN.dueling_placenet_TacTorqRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, pitch_only=self.pitch_only).double().to(self.device)
-                self.target_net = DQN.dueling_placenet_TacTorqRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size,pitch_only=self.pitch_only).double().to(self.device)
+                self.policy_net = DQN.dueling_placenet_TacTorqRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, pitch_only=self.pitch_only, layersize=layersize).double().to(self.device)
+                self.target_net = DQN.dueling_placenet_TacTorqRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size,pitch_only=self.pitch_only, layersize=layersize).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 0:
-                self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, pitch_only=self.pitch_only).double().to(self.device)
-                self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size,pitch_only=self.pitch_only).double().to(self.device)
+                self.policy_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, pitch_only=self.pitch_only, layersize=layersize).double().to(self.device)
+                self.target_net = DQN.dueling_placenet(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size,pitch_only=self.pitch_only, layersize=layersize).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 2: 
                 self.policy_net = DQN.dueling_placenet_TacRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, pitch_only=self.pitch_only).double().to(self.device)
                 self.target_net = DQN.dueling_placenet_TacRot(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, pitch_only=self.pitch_only).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 3:
-                self.policy_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
-                self.target_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
+                self.policy_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, layersize=layersize).double().to(self.device)
+                self.target_net = DQN.dueling_placenet_tactileonly(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size, layersize=layersize).double().to(self.device)
                 self.target_net.load_state_dict(self.policy_net.state_dict())
             elif reduced == 4:
                 self.policy_net = DQN.dueling_placenet_TacTorque(n_actions=self.env.action_space.n, n_timesteps=n_timesteps, sensor_type=sensor, size=grid_size).double().to(self.device)
@@ -476,7 +495,8 @@ class DQN_Algo():
         
         for episode in range(self.START_EP+1, self.START_EP + self.N_EPOCHS+1):
             
-            obs, info = self._reset_env(options={'gap_size' : self.gapsize, 'testing' : False, 'angle_range' : self.angle_range, 'sim_steps' : self.sim_steps, 'reward_fn' : self.reward_fn})
+            sampled_gap = np.random.uniform(0.002, self.gapsize)
+            obs, info = self._reset_env(options={'gap_size' : sampled_gap, 'testing' : False, 'angle_range' : self.angle_range, 'sim_steps' : self.sim_steps, 'reward_fn' : self.reward_fn})
             obs = self._normalize_observation(obs)
 
             done = False
@@ -522,7 +542,9 @@ class DQN_Algo():
                     #only record and train from episodes where object is not lost
                     if not info['cause'] == 'lostObject':
                         if reward > 0:
-                            if step >= (self.step_vals[self.I] / (self.sim_steps/10)):
+
+                            if step * 0.00039 * (self.sim_steps/10) >= sampled_gap: 
+                            
                                 self.summary_writer.add_scalar('Reward/train/final', reward, episode)
                                 self.summary_writer.add_scalar('Ep_length/train', step+1, episode)
                                 self.summary_writer.add_scalar('Reward/train/Cumulative', cumulative_reward, episode)
@@ -530,6 +552,7 @@ class DQN_Algo():
                                     self.replay_buffer.push(*transition)
                                     self.optimize()
                                     self.stepcount += 1    
+          
                         else:
                             self.summary_writer.add_scalar('Reward/train/final', reward, episode)
                             self.summary_writer.add_scalar('Ep_length/train', step+1, episode)    
@@ -688,6 +711,7 @@ if __name__=='__main__':
     parser.add_argument('--actionspace', required=False, default='full')
     parser.add_argument('--pitchonly', required=False, default='0')
     parser.add_argument('--n_timesteps', required=False, default='10')
+    parser.add_argument('--layersize', required=False, default='128')
     opt = parser.parse_args()
 
     sensor = opt.sensor
@@ -703,6 +727,8 @@ if __name__=='__main__':
     continue_ = bool(int(opt.continue_))
     pitch_only = bool(int(opt.pitchonly))
     n_timesteps = int(opt.n_timesteps)
+
+    layersize = int(opt.layersize)
 
     if not continue_:
         time_string = datetime.now().strftime("%d-%m-%Y-%H:%M")
@@ -743,7 +769,8 @@ if __name__=='__main__':
                     reduced=reduced,
                     episode = episode,
                     actionspace=actionspace,
-                    pitch_only=pitch_only)
+                    pitch_only=pitch_only, 
+                    layersize=layersize)
 
     algo.train()    
     algo.summary_writer.close()
